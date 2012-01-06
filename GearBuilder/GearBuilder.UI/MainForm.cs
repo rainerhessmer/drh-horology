@@ -82,6 +82,33 @@ namespace GearBuilder.UI
 				m_CycloidalGear.Pinion.ToothCount = 0;
 			}
 
+			if (Double.TryParse(m_WheelHoleDiameterTextBox.Text, out doubleValue))
+			{
+				m_CycloidalGear.Wheel.CenterHoleDiameter = doubleValue;
+			}
+			else
+			{
+				m_CycloidalGear.Wheel.CenterHoleDiameter = 0;
+			}
+
+			if (Double.TryParse(m_PinionHoleDiameterTextBox.Text, out doubleValue))
+			{
+				m_CycloidalGear.Pinion.CenterHoleDiameter = doubleValue;
+			}
+			else
+			{
+				m_CycloidalGear.Pinion.CenterHoleDiameter = 0;
+			}
+
+			if (Double.TryParse(m_CustomSlopTextBox.Text, out doubleValue))
+			{
+				m_CycloidalGear.CustomSlop = doubleValue;
+			}
+			else
+			{
+				m_CycloidalGear.CustomSlop = 0;
+			}
+
 			UpdateFromModel();
 		}
 
@@ -101,6 +128,11 @@ namespace GearBuilder.UI
 			m_AddendumRadiusTextBox.Text = m_CycloidalGear.Wheel.AddendumRadius.ToString();
 			m_PitchDiameterWheelTextBox.Text = m_CycloidalGear.Wheel.PitchDiameter.ToString();
 			m_PitchDiameterPinionTextBox.Text = m_CycloidalGear.Pinion.PitchDiameter.ToString();
+
+			bool customSlopEnabled = m_CycloidalGear.CustomSlopEnabled;
+			m_CustomSlopCheckBox.Checked = customSlopEnabled;
+			m_CustomSlopTextBox.Enabled = customSlopEnabled;
+			m_CustomSlopTextBox.Text = m_CycloidalGear.CustomSlop.ToString();
 		}
 
 		private void OnSVGButtonClick(object sender, EventArgs e)
@@ -116,6 +148,28 @@ namespace GearBuilder.UI
 			{
 				writer.Write(svgText);
 			}
+		}
+
+		private void OnCustomSlopCheckBoxChanged(object sender, EventArgs e)
+		{
+			if (m_CustomSlopCheckBox.Checked)
+			{
+				double doubleValue;
+				if (Double.TryParse(m_CustomSlopTextBox.Text, out doubleValue))
+				{
+					m_CycloidalGear.CustomSlop = doubleValue;
+				}
+				else
+				{
+					m_CycloidalGear.CustomSlop = 0;
+				}
+				m_CycloidalGear.CustomSlopEnabled = true;
+			}
+			else
+			{
+				m_CycloidalGear.CustomSlopEnabled = false;
+			}
+			UpdateFromModel();
 		}
 	}
 }

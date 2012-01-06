@@ -49,6 +49,32 @@ namespace GearBuilder.Cycloidal
 			}
 		}
 
+		/// <summary>
+		/// The slop in mm between the apex of one gear and the trough of the other. Only used if custom slop is enabled.
+		/// http://www.csparks.com/watchmaking/CycloidalGears/index.jhtml is used.
+		/// </summary>
+		private double m_CustomSlop;
+		public double CustomSlop
+		{
+			get { return m_CustomSlop; }
+			set
+			{
+				m_CustomSlop = value;
+				Update();
+			}
+		}
+
+		private bool m_CustomSlopEnabled;
+		public bool CustomSlopEnabled
+		{
+			get { return m_CustomSlopEnabled; }
+			set
+			{
+				m_CustomSlopEnabled = value;
+				Update();
+			}
+		}
+
 		#endregion
 
 		public Wheel Wheel { get; private set; }

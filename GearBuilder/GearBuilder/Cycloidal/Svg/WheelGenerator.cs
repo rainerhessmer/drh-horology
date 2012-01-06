@@ -47,16 +47,6 @@ namespace GearBuilder.Cycloidal.Svg
 			// Wheel dedendum circle
 			helperLinesGroup.AddChild(SvgHelper.CreateCircle(wheel.Center, wheel.PitchDiameter / 2.0 - wheel.Dedendum));
 
-
-			//double radius = m_CycloidalGear.WheelPitchDiameter / 2.0 + m_CycloidalGear.Addendum + 5;
-
-			//// tooth center line
-			//groupHelpLines.AddChild(new SvgLineElement(m_WheelCenter.X, m_WheelCenter.Y, m_WheelCenter.X + radius, m_WheelCenter.Y));
-
-			//// tooth flanks
-			//groupHelpLines.AddChild(new SvgLineElement(m_WheelCenter.X, m_WheelCenter.Y, m_WheelCenter.X + Math.Cos(m_CycloidalGear.HalfToothAngle) * radius, m_WheelCenter.Y + Math.Sin(m_CycloidalGear.HalfToothAngle) * radius));
-			//groupHelpLines.AddChild(new SvgLineElement(m_WheelCenter.X, m_WheelCenter.Y, m_WheelCenter.X + Math.Cos(m_CycloidalGear.HalfToothAngle) * radius, m_WheelCenter.Y - Math.Sin(m_CycloidalGear.HalfToothAngle) * radius));
-
 			// wheel center
 			double halfCrossLength = 10;
 			helperLinesGroup.AddChild(new SvgLineElement(wheel.Center.X - halfCrossLength, wheel.Center.Y, wheel.Center.X + halfCrossLength, wheel.Center.Y));
@@ -79,11 +69,6 @@ namespace GearBuilder.Cycloidal.Svg
 				InsertWheelToothPath(wheel, tooth, nextTooth, pathBuilder);
 			}
 			pathBuilder.Append(" z");
-
-
-			//root.AddChild(CreateCircle(wheelTooth.Apex, 1, s_MinorLineStyle));
-			//root.AddChild(CreateCircle(wheelTooth.AddendumCircleCenterLeft, m_CycloidalGear.AddendumRadius, s_MinorLineStyle));
-			//root.AddChild(CreateCircle(wheelTooth.AddendumCircleCenterRight, m_CycloidalGear.AddendumRadius, s_MinorLineStyle));
 
 			SvgPath svgPath = new SvgPath(pathBuilder.ToString());
 			SvgPathElement svgPathElement = new SvgPathElement();
