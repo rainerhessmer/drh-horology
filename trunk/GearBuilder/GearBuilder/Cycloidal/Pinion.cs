@@ -38,8 +38,14 @@ namespace GearBuilder.Cycloidal
 		internal override void Update()
 		{
 			this.PitchDiameter = this.GearSet.Module * this.ToothCount;
-			this.Dedendum = this.GearSet.Module * (this.GearSet.PracticalAddendumFactor + 0.4);
-			this.Dedendum = this.GearSet.Wheel.Addendum + 0.5;
+			if (base.GearSet.CustomSlopEnabled)
+			{
+				this.Dedendum = this.GearSet.Wheel.Addendum + base.GearSet.CustomSlop;
+			}
+			else
+			{
+				this.Dedendum = this.GearSet.Module * (this.GearSet.PracticalAddendumFactor + 0.4);
+			}
 			InitializeToothAngle();
 			InitializeAddendum();
 		}

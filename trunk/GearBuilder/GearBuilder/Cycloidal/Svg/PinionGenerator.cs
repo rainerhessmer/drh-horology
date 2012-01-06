@@ -48,21 +48,6 @@ namespace GearBuilder.Cycloidal.Svg
 			helperLinesGroup.AddChild(SvgHelper.CreateCircle(pinion.Center, pinion.PitchDiameter / 2.0 - pinion.Dedendum));
 
 
-			double radius = pinion.PitchDiameter / 2.0 + 5;
-
-			// tooth center line
-			helperLinesGroup.AddChild(new SvgLineElement(pinion.Center.X, pinion.Center.Y, pinion.Center.X - radius, pinion.Center.Y));
-
-			// tooth flanks
-			helperLinesGroup.AddChild(new SvgLineElement(pinion.Center.X, pinion.Center.Y, pinion.Center.X - Math.Cos(pinion.HalfToothAngle) * radius, pinion.Center.Y + Math.Sin(pinion.HalfToothAngle) * radius));
-			helperLinesGroup.AddChild(new SvgLineElement(pinion.Center.X, pinion.Center.Y, pinion.Center.X - Math.Cos(pinion.HalfToothAngle) * radius, pinion.Center.Y - Math.Sin(pinion.HalfToothAngle) * radius));
-
-			// wheel center
-			double halfCrossLength = 10;
-			helperLinesGroup.AddChild(new SvgLineElement(pinion.Center.X - halfCrossLength, pinion.Center.Y, pinion.Center.X + halfCrossLength, pinion.Center.Y));
-			helperLinesGroup.AddChild(new SvgLineElement(pinion.Center.X, pinion.Center.Y - halfCrossLength, pinion.Center.X, pinion.Center.Y + halfCrossLength));
-
-
 			SvgGroupElement mainGroup = new SvgGroupElement("Main");
 			mainGroup.Style = Styles.MinorLineStyle;
 			root.AddChild(mainGroup);
@@ -96,7 +81,6 @@ namespace GearBuilder.Cycloidal.Svg
 		private void InsertToothPath(Pinion pinion, PinionTooth tooth, PinionTooth nextTooth, StringBuilder pathBuilder)
 		{
 			pathBuilder.AppendFormat(" L{0},{1}", (float)tooth.PitchCircleIntersectLeft.X, (float)tooth.PitchCircleIntersectLeft.Y);
-			//pathBuilder.AppendFormat(" L{0},{1}", (float)tooth.PitchCircleIntersectRight.X, (float)tooth.PitchCircleIntersectRight.Y);
 
 			pathBuilder.AppendFormat(
 				" A{0},{1} 0 0,1 {2},{3}",
