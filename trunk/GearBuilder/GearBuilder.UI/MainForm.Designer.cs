@@ -73,6 +73,8 @@
 			this.label24 = new System.Windows.Forms.Label();
 			this.linkLabel1 = new System.Windows.Forms.LinkLabel();
 			this.label25 = new System.Windows.Forms.Label();
+			this.m_OutputPathTextBox = new System.Windows.Forms.TextBox();
+			this.label26 = new System.Windows.Forms.Label();
 			this.m_InputGroupBox.SuspendLayout();
 			this.groupBox1.SuspendLayout();
 			this.SuspendLayout();
@@ -112,8 +114,8 @@
 			this.textBox1.Size = new System.Drawing.Size(243, 61);
 			this.textBox1.TabIndex = 19;
 			this.textBox1.Text = "The slop in mm between the apex of one gear and the trough of the other. Only use" +
-    "de if custom slop is enabled. Otherwise the default as described by Hugh Sparks " +
-    "is used.";
+    "d if custom slop is enabled. Otherwise the default as described by Hugh Sparks i" +
+    "s used.";
 			// 
 			// label11
 			// 
@@ -479,7 +481,7 @@
 			// 
 			// m_CreateSVGButton
 			// 
-			this.m_CreateSVGButton.Location = new System.Drawing.Point(126, 367);
+			this.m_CreateSVGButton.Location = new System.Drawing.Point(532, 298);
 			this.m_CreateSVGButton.Name = "m_CreateSVGButton";
 			this.m_CreateSVGButton.Size = new System.Drawing.Size(75, 23);
 			this.m_CreateSVGButton.TabIndex = 28;
@@ -516,11 +518,30 @@
 			this.label25.TabIndex = 31;
 			this.label25.Text = "British Standard 978, Part 2";
 			// 
+			// m_OutputPathTextBox
+			// 
+			this.m_OutputPathTextBox.Location = new System.Drawing.Point(83, 300);
+			this.m_OutputPathTextBox.Name = "m_OutputPathTextBox";
+			this.m_OutputPathTextBox.ReadOnly = true;
+			this.m_OutputPathTextBox.Size = new System.Drawing.Size(443, 20);
+			this.m_OutputPathTextBox.TabIndex = 32;
+			// 
+			// label26
+			// 
+			this.label26.AutoSize = true;
+			this.label26.Location = new System.Drawing.Point(12, 302);
+			this.label26.Name = "label26";
+			this.label26.Size = new System.Drawing.Size(64, 13);
+			this.label26.TabIndex = 33;
+			this.label26.Text = "Output Path";
+			// 
 			// MainForm
 			// 
 			this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
 			this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-			this.ClientSize = new System.Drawing.Size(658, 472);
+			this.ClientSize = new System.Drawing.Size(615, 353);
+			this.Controls.Add(this.label26);
+			this.Controls.Add(this.m_OutputPathTextBox);
 			this.Controls.Add(this.label25);
 			this.Controls.Add(this.linkLabel1);
 			this.Controls.Add(this.label24);
@@ -585,6 +606,8 @@
 		private System.Windows.Forms.Label label24;
 		private System.Windows.Forms.LinkLabel linkLabel1;
 		private System.Windows.Forms.Label label25;
+		private System.Windows.Forms.TextBox m_OutputPathTextBox;
+		private System.Windows.Forms.Label label26;
 	}
 }
 
