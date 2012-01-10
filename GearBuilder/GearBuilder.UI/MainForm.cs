@@ -31,16 +31,21 @@ using System.Windows.Forms;
 using GearBuilder.Cycloidal;
 using System.IO;
 using GearBuilder.Cycloidal.Svg;
+using System.Reflection;
 
 namespace GearBuilder.UI
 {
 	public partial class MainForm : Form
 	{
+		private const string c_fileName = "CycloidalGear.svg";
 		private CycloidalGear m_CycloidalGear = new CycloidalGear();
+		private string m_OutputFilePath;
 
 		public MainForm()
 		{
 			InitializeComponent();
+
+			InitializeOutputPath();
 
 			m_CycloidalGear.Module = 4;
 			m_CycloidalGear.Wheel.ToothCount = 30;
@@ -50,6 +55,21 @@ namespace GearBuilder.UI
 			m_CycloidalGear.Pinion.CenterHoleDiameter = 6;
 
 			UpdateFromModel();
+		}
+
+		private void InitializeOutputPath()
+		{
+			Assembly assembly = Assembly.GetExecutingAssembly();
+
+			string installPath = Path.GetDirectoryName(assembly.CodeBase);
+
+			// However, the CodeBase returns a URI (starting with file:\). We need to strip off leading part
+			if (installPath.StartsWith(@"file:\", StringComparison.Ordinal))
+			{
+				installPath = installPath.Substring(6);
+			}
+			m_OutputFilePath = Path.Combine(installPath, c_fileName);
+			m_OutputPathTextBox.Text = m_OutputFilePath;
 		}
 
 		private void OnInputLeave(object sender, EventArgs e)
@@ -139,7 +159,7 @@ namespace GearBuilder.UI
 		{
 			GearSetGenerator gearGenerator = new GearSetGenerator(m_CycloidalGear);
 			string svgText = gearGenerator.Build();
-			Save(svgText, "CycloidalGear.svg");
+			Save(svgText, m_OutputFilePath);
 		}
 
 		private static void Save(string svgText, string filePath)
