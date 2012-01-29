@@ -191,5 +191,19 @@ namespace GearBuilder.UI
 			}
 			UpdateFromModel();
 		}
+
+		private void OnBrowseButtonClick(object sender, EventArgs e)
+		{
+			SaveFileDialog saveFileDialog = new SaveFileDialog();
+			saveFileDialog.Filter = "SVG File|*.svg";
+			saveFileDialog.Title = "SVG Output File";
+			saveFileDialog.ShowDialog();
+
+			if (saveFileDialog.FileName != null)
+			{
+				m_OutputFilePath = saveFileDialog.FileName;
+				m_OutputPathTextBox.Text = m_OutputFilePath;
+			}
+		}
 	}
 }

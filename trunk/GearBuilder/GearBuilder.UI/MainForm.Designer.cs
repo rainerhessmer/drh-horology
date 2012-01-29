@@ -75,6 +75,8 @@
 			this.label25 = new System.Windows.Forms.Label();
 			this.m_OutputPathTextBox = new System.Windows.Forms.TextBox();
 			this.label26 = new System.Windows.Forms.Label();
+			this.m_BrowseButton = new System.Windows.Forms.Button();
+			this.label27 = new System.Windows.Forms.Label();
 			this.m_InputGroupBox.SuspendLayout();
 			this.groupBox1.SuspendLayout();
 			this.SuspendLayout();
@@ -481,11 +483,11 @@
 			// 
 			// m_CreateSVGButton
 			// 
-			this.m_CreateSVGButton.Location = new System.Drawing.Point(532, 298);
+			this.m_CreateSVGButton.Location = new System.Drawing.Point(417, 329);
 			this.m_CreateSVGButton.Name = "m_CreateSVGButton";
-			this.m_CreateSVGButton.Size = new System.Drawing.Size(75, 23);
+			this.m_CreateSVGButton.Size = new System.Drawing.Size(152, 23);
 			this.m_CreateSVGButton.TabIndex = 28;
-			this.m_CreateSVGButton.Text = "Save SVG";
+			this.m_CreateSVGButton.Text = "Generate && save SVG";
 			this.m_CreateSVGButton.UseVisualStyleBackColor = true;
 			this.m_CreateSVGButton.Click += new System.EventHandler(this.OnSVGButtonClick);
 			// 
@@ -523,7 +525,7 @@
 			this.m_OutputPathTextBox.Location = new System.Drawing.Point(83, 300);
 			this.m_OutputPathTextBox.Name = "m_OutputPathTextBox";
 			this.m_OutputPathTextBox.ReadOnly = true;
-			this.m_OutputPathTextBox.Size = new System.Drawing.Size(443, 20);
+			this.m_OutputPathTextBox.Size = new System.Drawing.Size(486, 20);
 			this.m_OutputPathTextBox.TabIndex = 32;
 			// 
 			// label26
@@ -535,11 +537,33 @@
 			this.label26.TabIndex = 33;
 			this.label26.Text = "Output Path";
 			// 
+			// m_BrowseButton
+			// 
+			this.m_BrowseButton.Location = new System.Drawing.Point(578, 300);
+			this.m_BrowseButton.Name = "m_BrowseButton";
+			this.m_BrowseButton.Size = new System.Drawing.Size(29, 23);
+			this.m_BrowseButton.TabIndex = 34;
+			this.m_BrowseButton.Text = "...";
+			this.m_BrowseButton.UseVisualStyleBackColor = true;
+			this.m_BrowseButton.Click += new System.EventHandler(this.OnBrowseButtonClick);
+			// 
+			// label27
+			// 
+			this.label27.AutoSize = true;
+			this.label27.Font = new System.Drawing.Font("Microsoft Sans Serif", 8.25F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+			this.label27.Location = new System.Drawing.Point(80, 334);
+			this.label27.Name = "label27";
+			this.label27.Size = new System.Drawing.Size(331, 13);
+			this.label27.TabIndex = 35;
+			this.label27.Text = "NOTE: An existing file at this location will be overwritten!";
+			// 
 			// MainForm
 			// 
 			this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
 			this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-			this.ClientSize = new System.Drawing.Size(615, 353);
+			this.ClientSize = new System.Drawing.Size(615, 364);
+			this.Controls.Add(this.label27);
+			this.Controls.Add(this.m_BrowseButton);
 			this.Controls.Add(this.label26);
 			this.Controls.Add(this.m_OutputPathTextBox);
 			this.Controls.Add(this.label25);
@@ -608,6 +632,8 @@
 		private System.Windows.Forms.Label label25;
 		private System.Windows.Forms.TextBox m_OutputPathTextBox;
 		private System.Windows.Forms.Label label26;
+		private System.Windows.Forms.Button m_BrowseButton;
+		private System.Windows.Forms.Label label27;
 	}
 }
 

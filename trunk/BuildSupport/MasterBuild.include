@@ -1,0 +1,37 @@
+<?xml version="1.0"?>
+<project name="MasterBuildInclude" description="Include file for any NAnt master build file">
+	<include buildfile="${basedir}/BuildSupport/SharedBuild.include"/>
+	
+	<target name="clean" depends="init" description="Deletes current build configuration" failonerror="true">
+		<call target="cleanBuildDirs"/>
+	
+		<!-- Recursively clean subprojects -->
+		<property name="target" value="clean_internal"/>
+		<call target="recurse"/>
+
+		<if test="${target::exists('clean_afterShared')}">
+			<call target="clean_afterShared" />
+		</if>
+	</target>
+	
+	<target name="build" depends="init" description="Builds the current configuration" failonerror="true">
+		<mkdir dir="${build.dir.neutral}" unless="${directory::exists(build.dir.neutral)}"/>
+		<if test="${target::exists('build_beforeShared')}">
+			<call target="build_beforeShared" />
+		</if>
+
+		<!-- Recursively build subprojects -->
+		<property name="target" value="build_internal"/>
+		<call target="recurse"/>
+
+		<if test="${target::exists('build_afterShared')}">
+			<call target="build_afterShared" />
+		</if>
+		<echo message="End of build: ${datetime::now()}" />
+	</target>
+
+	<target name="test" depends="build" description="Performs the NUnit based tests against the previously built binaries.">
+		<property name="target" value="test"/>
+		<call target="recurse"/>
+	</target>
+</project>
