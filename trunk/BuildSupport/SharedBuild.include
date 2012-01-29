@@ -42,7 +42,7 @@
       xpath="Version/@Revision"
       property="version.revision">
     </xmlpeek>
-    <property name="version.full" value="${version.major}.${version.minor}.${version.buildNr}.${version.revision}." />
+    <property name="version.full" value="${version.major}.${version.minor}.${version.buildNr}.${version.revision}" />
 		<echo message="${version.full}"/>
 	</target>
 
