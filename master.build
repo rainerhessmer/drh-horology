@@ -29,7 +29,7 @@
 	</target>
 
 	<target name="package" depends="build" description="Creates zip file for distribution">
-    <property name="zipfile" value="GearBuilder_v${version.full}.zip" />
+    <property name="zipfile" value="DRH_GearBuilder_v${version.major}.${version.minor}.zip" />
     <property name="zipfile.path" value="${packages.basedir}/${zipfile}" />
 
 		<echo message="Assembling zip file ${zipfile.path} ..."/>

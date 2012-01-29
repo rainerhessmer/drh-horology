@@ -47,6 +47,10 @@ namespace GearBuilder.Cycloidal.Svg
 			// Wheel dedendum circle
 			helperLinesGroup.AddChild(SvgHelper.CreateCircle(pinion.Center, pinion.PitchDiameter / 2.0 - pinion.Dedendum));
 
+			// wheel center
+			double halfCrossLength = 10;
+			helperLinesGroup.AddChild(new SvgLineElement(pinion.Center.X - halfCrossLength, pinion.Center.Y, pinion.Center.X + halfCrossLength, pinion.Center.Y));
+			helperLinesGroup.AddChild(new SvgLineElement(pinion.Center.X, pinion.Center.Y - halfCrossLength, pinion.Center.X, pinion.Center.Y + halfCrossLength));
 
 			SvgGroupElement mainGroup = new SvgGroupElement("Main");
 			mainGroup.Style = Styles.MinorLineStyle;
