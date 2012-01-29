@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<project name="LightStone4net" default="build">
+	<!-- global project settings -->
+	<property name="basedir" value="${project::get-base-directory()}/.." /> <!-- relative path to the Trunk directory -->
+
+	<include buildfile="${basedir}/BuildSupport/MasterBuild.include"/>
+
+	<!-- build tasks -->
+	<target name="recurse" description="Recursively invokes specified target in all subprojects">
+		<nant buildfile="${basedir}/Code/LightStone4net.build" target="${target}"/>
+	</target>
+</project>

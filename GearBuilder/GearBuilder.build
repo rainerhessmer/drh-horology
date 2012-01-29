@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<project name="GearBuilder" default="build">
+    <!-- global project settings -->
+	<property name="basedir" value="${project::get-base-directory()}\.." /> <!-- relative path to the Trunk directory -->
+	<property name="solution.file" value="${project::get-base-directory()}\GearBuilder.sln" />
+
+	<include buildfile="${basedir}/BuildSupport/SharedBuild.include"/>
+
+	<target name="clean_internal" depends="init" description="Deletes current build configuration">
+		<echo message="Deleting all project bin folders ..."/>
+		<delete>
+			<fileset>
+				<include name="**/bin/**"/>
+				<include name="**/obj/**"/>
+			</fileset>
+		</delete>
+	</target>
+
+  <target name="updateVersion" description="Updates version numbers in assemblyinfo files.">
+	</target>
+
+	<target name="build_internal" depends="init" description="Builds current configuration">
+		<echo message="Building the solution '${solution.file}' ..."/>
+		<exec program="${msbuildbinpath}\msbuild.exe" commandline="/p:Configuration=${project.config};OutputPath=${build.dir.neutral}/ ${solution.file}"/>
+	</target>
+</project>
