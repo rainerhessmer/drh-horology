@@ -196,7 +196,7 @@ namespace SvgNet.SvgTypes
 			if (i == -1)
 				return;
 
-			_num = float.Parse(s.Substring(0, i+1));
+			_num = float.Parse(s.Substring(0, i+1), CultureInfo.InvariantCulture);
 
 			switch(s.Substring(i+1))
 			{
@@ -238,7 +238,7 @@ namespace SvgNet.SvgTypes
 
 		public override string ToString()
 		{
-			string s = _num.ToString();
+			string s = _num.ToString(CultureInfo.InvariantCulture);
 			switch (_type)
 			{
 				case SvgLengthType.SVG_LENGTHTYPE_PERCENTAGE:
@@ -334,7 +334,7 @@ namespace SvgNet.SvgTypes
 			if (i == -1)
 				return;
 
-			_num = int.Parse(s.Substring(0, i+1));
+			_num = int.Parse(s.Substring(0, i+1), CultureInfo.InvariantCulture);
 
 			switch(s.Substring(i+1))
 			{
@@ -358,7 +358,7 @@ namespace SvgNet.SvgTypes
 
 		public override string ToString()
 		{
-			string s = _num.ToString();
+			string s = _num.ToString(CultureInfo.InvariantCulture);
 			switch (_type)
 			{
 				case SvgAngleType.SVG_ANGLETYPE_DEG:
@@ -782,7 +782,7 @@ namespace SvgNet.SvgTypes
 
 				for(int j=0;j<datasize;++j)
 				{
-					arr[j] = float.Parse(sa[i+j]);
+					arr[j] = float.Parse(sa[i + j], CultureInfo.InvariantCulture);
 				}
 
 				ps = new PathSeg(pt, abs, arr);
@@ -807,7 +807,7 @@ namespace SvgNet.SvgTypes
 
 				foreach(float d in seg.Data)
 				{
-					s += d.ToString();
+					s += d.ToString(CultureInfo.InvariantCulture);
 					s += " ";
 				}
 
@@ -974,7 +974,7 @@ namespace SvgNet.SvgTypes
 
 			foreach(float f in _pts)
 			{
-				result += f.ToString();
+				result += f.ToString(CultureInfo.InvariantCulture);
 				result += " ";
 			}
 
@@ -1015,7 +1015,7 @@ namespace SvgNet.SvgTypes
 					if (str != "")
 					{
 						str.Trim();
-						arr .Add(Single.Parse(str));
+						arr.Add(Single.Parse(str, CultureInfo.InvariantCulture));
 					}
 				}
 
