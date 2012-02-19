@@ -27,6 +27,7 @@ using System.Text;
 using SvgNet.SvgElements;
 using GearBuilder.Common.Svg;
 using SvgNet.SvgTypes;
+using System.Globalization;
 
 namespace GearBuilder.Cycloidal.Svg
 {
@@ -61,7 +62,7 @@ namespace GearBuilder.Cycloidal.Svg
 			WheelTooth[] teeth = wheel.GetTeeth(0);
 			StringBuilder pathBuilder = new StringBuilder();
 
-			pathBuilder.AppendFormat("M{0},{1}", (float)teeth[0].DedendumIntersectLeft.X, (float)teeth[0].DedendumIntersectLeft.Y);
+			pathBuilder.AppendFormat(CultureInfo.InvariantCulture, "M{0},{1}", (float)teeth[0].DedendumIntersectLeft.X, (float)teeth[0].DedendumIntersectLeft.Y);
 			for (int i = 0; i < teeth.Length; i++)
 			{
 				WheelTooth tooth = teeth[i];
@@ -84,22 +85,26 @@ namespace GearBuilder.Cycloidal.Svg
 
 		private void InsertWheelToothPath(Wheel wheel, WheelTooth tooth, WheelTooth nextTooth, StringBuilder pathBuilder)
 		{
-			pathBuilder.AppendFormat(" L{0},{1}", (float)tooth.PitchCircleIntersectLeft.X, (float)tooth.PitchCircleIntersectLeft.Y);
+			pathBuilder.AppendFormat(CultureInfo.InvariantCulture, " L{0},{1}", (float)tooth.PitchCircleIntersectLeft.X, (float)tooth.PitchCircleIntersectLeft.Y);
 
 			pathBuilder.AppendFormat(
+				CultureInfo.InvariantCulture, 
 				" A{0},{1} 0 0,1 {2},{3}",
 				(float)wheel.AddendumRadius, (float)wheel.AddendumRadius,
 				(float)tooth.Apex.X, (float)tooth.Apex.Y);
 
 			pathBuilder.AppendFormat(
+				CultureInfo.InvariantCulture, 
 				" A{0},{1} 0 0,1 {2},{3}",
 				(float)wheel.AddendumRadius, (float)wheel.AddendumRadius,
 				(float)tooth.PitchCircleIntersectRight.X, (float)tooth.PitchCircleIntersectRight.Y);
 
-			pathBuilder.AppendFormat(" L{0},{1}", (float)tooth.DedendumIntersectRight.X, (float)tooth.DedendumIntersectRight.Y);
+			pathBuilder.AppendFormat(
+				CultureInfo.InvariantCulture, " L{0},{1}", (float)tooth.DedendumIntersectRight.X, (float)tooth.DedendumIntersectRight.Y);
 
 			double radius = wheel.PitchDiameter / 2.0 - wheel.Dedendum;
 			pathBuilder.AppendFormat(
+				CultureInfo.InvariantCulture, 
 				" A{0},{1} 0 0,1 {2},{3}",
 				(float)radius, (float)radius,
 				(float)nextTooth.DedendumIntersectLeft.X, (float)nextTooth.DedendumIntersectLeft.Y);

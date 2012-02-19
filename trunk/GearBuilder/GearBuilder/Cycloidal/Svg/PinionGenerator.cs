@@ -27,6 +27,7 @@ using System.Text;
 using SvgNet.SvgElements;
 using GearBuilder.Common.Svg;
 using SvgNet.SvgTypes;
+using System.Globalization;
 
 namespace GearBuilder.Cycloidal.Svg
 {
@@ -60,7 +61,7 @@ namespace GearBuilder.Cycloidal.Svg
 			PinionTooth[] teeth = pinion.GetTeeth(Math.PI / pinion.ToothCount);
 			StringBuilder pathBuilder = new StringBuilder();
 
-			pathBuilder.AppendFormat("M{0},{1}", (float)teeth[0].DedendumIntersectLeft.X, (float)teeth[0].DedendumIntersectLeft.Y);
+			pathBuilder.AppendFormat(CultureInfo.InvariantCulture, "M{0},{1}", (float)teeth[0].DedendumIntersectLeft.X, (float)teeth[0].DedendumIntersectLeft.Y);
 			for (int i = 0; i < teeth.Length; i++)
 			{
 				PinionTooth tooth = teeth[i];
@@ -84,22 +85,25 @@ namespace GearBuilder.Cycloidal.Svg
 
 		private void InsertToothPath(Pinion pinion, PinionTooth tooth, PinionTooth nextTooth, StringBuilder pathBuilder)
 		{
-			pathBuilder.AppendFormat(" L{0},{1}", (float)tooth.PitchCircleIntersectLeft.X, (float)tooth.PitchCircleIntersectLeft.Y);
+			pathBuilder.AppendFormat(CultureInfo.InvariantCulture, " L{0},{1}", (float)tooth.PitchCircleIntersectLeft.X, (float)tooth.PitchCircleIntersectLeft.Y);
 
 			pathBuilder.AppendFormat(
+				CultureInfo.InvariantCulture, 
 				" A{0},{1} 0 0,1 {2},{3}",
 				(float)pinion.AddendumRadius, (float)pinion.AddendumRadius,
 				(float)tooth.Apex.X, (float)tooth.Apex.Y);
 
 			pathBuilder.AppendFormat(
+				CultureInfo.InvariantCulture, 
 				" A{0},{1} 0 0,1 {2},{3}",
 				(float)pinion.AddendumRadius, (float)pinion.AddendumRadius,
 				(float)tooth.PitchCircleIntersectRight.X, (float)tooth.PitchCircleIntersectRight.Y);
 
-			pathBuilder.AppendFormat(" L{0},{1}", (float)tooth.DedendumIntersectRight.X, (float)tooth.DedendumIntersectRight.Y);
+			pathBuilder.AppendFormat(CultureInfo.InvariantCulture, " L{0},{1}", (float)tooth.DedendumIntersectRight.X, (float)tooth.DedendumIntersectRight.Y);
 
 			double radius = pinion.PitchDiameter / 2.0 - pinion.Dedendum;
 			pathBuilder.AppendFormat(
+				CultureInfo.InvariantCulture, 
 				" A{0},{1} 0 0,1 {2},{3}",
 				(float)radius, (float)radius,
 				(float)nextTooth.DedendumIntersectLeft.X, (float)nextTooth.DedendumIntersectLeft.Y);
