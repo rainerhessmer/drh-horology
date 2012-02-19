@@ -12,6 +12,9 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyProduct("GearBuilder.UI")]
 [assembly: AssemblyCulture("")]
 
+[assembly: AssemblyCopyrightAttribute("Copyright (C) 2012 Dr. Rainer Hessmer")]
+[assembly: AssemblyTrademarkAttribute("")]
+
 // Setting ComVisible to false makes the types in this assembly not visible 
 // to COM components.  If you need to access a type in this assembly from 
 // COM, set the ComVisible attribute to true on that type.

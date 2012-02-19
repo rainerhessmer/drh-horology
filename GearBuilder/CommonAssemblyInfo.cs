@@ -2,9 +2,6 @@ using System;
 using System.Reflection;
 using System.Runtime.InteropServices;
 
-[assembly: AssemblyCopyrightAttribute("Copyright (C) 2006 Dr. Rainer Hessmer")]
-[assembly: AssemblyTrademarkAttribute("")]
-
 // Version information for an assembly consists of the following four values:
 //
 //      Major Version
