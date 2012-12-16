@@ -1,0 +1,268 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" >
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+	<title>Involute Gear Builder</title>
+	<meta name="description" content="Involute gear builder with SVG output. Based on GPL licensed code from GregFrost (see http://www.thingiverse.com/thing:3575) and hence also licensed under the General Public License (GPL).">
+	<meta name="author" content="Dr. Rainer Hessmer">
+	<style type="text/css">
+		@import ".lib/css/jquery.svg.css";
+	</style>
+
+	<!--script type="text/javascript" src="//ajax.googleapis.com/ajax/libs/jquery/1.8.2/jquery.min.js"></script-->
+	<script type="text/javascript" src="./lib/js/jquery-1.8.3.min.js"></script>
+	<script type="text/javascript" src="./lib/js/jquery.svg.js"></script>
+	<script type="text/javascript" src="./lib/js/TS_vector2.js"></script>
+
+	<script type="text/javascript">
+		(function ($) {
+			$(document).ready(function () {
+			
+				// string.format function like in .Net (see http://stackoverflow.com/questions/610406/javascript-equivalent-to-printf-string-format/4673436#4673436)
+				String.prototype.format = function() {
+					var args = arguments;
+					return this.replace(/{(\d+)}/g, function(match, number) { 
+						return typeof args[number] != 'undefined'
+							? args[number]
+							: match
+						;
+					});
+				};
+
+				$('#svg_container').svg();
+				var svg = $('#svg_container').svg('get');
+				//svg.configure({width: '400mm', height: '300mm', viewBox: '-200 -150 400 300'}, true);
+				svg.configure({style: "border: 1px solid #484;"});
+
+				var helperLinesStyle = {
+					fill: 'none', 
+					stroke: 'blue',
+					'stroke-width': 0.1
+				};
+
+				var regularLinesStyle = {
+					fill: 'none', 
+					stroke: 'black',
+					'stroke-width': 0.1
+				};
+
+				// all angles in degress
+				function createGear(options) {
+					var options = options || {};
+
+					var numberOfTeeth = options.numberOfTeeth || 15;
+					var circularPitch = options.circularPitch;    // Arc distance along a specified pitch circle or pitch line between corresponding profiles of adjacent teeth.
+					var diametralPitch = options.diametralPitch;  // Ratio of the number of teeth to the standard pitch diameter in inches.
+					var pressureAngle = options.pressureAngle || 20; // Most common stock gears have a 20° pressure angle, with 14½° and 25° pressure angle gears being much less
+					// common. Increasing the pressure angle increases the width of the base of the gear tooth, leading to greater strength and load carrying capacity. Decreasing
+					// the pressure angle provides lower backlash, smoother operation and less sensitivity to manufacturing errors. (reference: http://en.wikipedia.org/wiki/Involute_gear)
+
+					var clearance = options.clearance || 0.2;
+					var boreDiameter = options.boreDiameter || 0;
+					//var circles = options.circles || 0;
+					var backlash = options.backlash || 0;
+					var involuteFacetsCount = options.involuteFacetsCount || 5;
+					var showHelperLines = options.showHelperLines;
+
+					if (!(circularPitch || diametralPitch)) {
+						throw "gear module needs either a diametralPitch or circularPitch";
+					}
+
+					//Convert diametrial pitch to our native circular pitch
+					var circularPitch = circularPitch ? circularPitch : 180 / diametralPitch;
+
+					// Pitch diameter: Diameter of pitch circle.
+					var pitchDiameter = numberOfTeeth * circularPitch / 180;
+					var pitchRadius = pitchDiameter / 2;
+					//alert("Teeth:", numberOfTeeth, " Pitch radius:", pitchRadius);
+
+					// Base Circle
+					var baseRadius = pitchRadius * Math.cos(pressureAngle * Math.PI / 180);
+
+					// Diametrial pitch: Number of teeth per unit length.
+					var pitchDiametrial = numberOfTeeth / pitchDiameter;
+
+					// Addendum: Radial distance from pitch circle to outside circle.
+					var addendum = 1 / pitchDiametrial;
+
+					//Outer Circle
+					var outerRadius = pitchRadius + addendum;
+
+					// Dedendum: Radial distance from pitch circle to root diameter
+					var dedendum = addendum + clearance;
+
+					// Root diameter: Diameter of bottom of tooth spaces.
+					var rootRadius = pitchRadius - dedendum;
+					var backlashAngleRad = backlash / pitchRadius;
+					var halfThickAngleRad = (2 * Math.PI / numberOfTeeth - backlashAngleRad) / 4; // why not devided by 2?
+					
+					var width = 2 * outerRadius + 5;
+					var height = 2 * outerRadius + 5;
+					
+					var sizeConfig = {
+						width: width.toString() + "mm",
+						height: width.toString() + "mm",
+						viewBox: (-width/2).toString() + " " + (-height/2).toString() + " " + width.toString() + " " + height.toString()
+					};
+					
+					svg.configure(sizeConfig, false);
+					//var svg = $('#svg_container').svg('get');
+					var gearGroup = svg.group();
+					if (showHelperLines) {
+						var helperLinesGroup = svg.group(gearGroup, helperLinesStyle);
+						svg.circle(helperLinesGroup, 0, 0, outerRadius);
+						svg.circle(helperLinesGroup, 0, 0, rootRadius);
+						
+						var length = 5;
+						svg.line(helperLinesGroup, -length, 0, length, 0);
+						svg.line(helperLinesGroup, 0, -length, 0, length);
+					}
+					
+					var gearToothPoints = involuteGearTooth(pitchRadius, rootRadius, baseRadius, outerRadius, halfThickAngleRad, involuteFacetsCount);
+					
+					var gearPoints = [];
+					var deltaRad = -2 * Math.PI / numberOfTeeth;
+					
+					gearPoints.push(gearToothPoints);
+					for(var i = 1; i < numberOfTeeth; i++) {
+						var rotationAngleRad = i * deltaRad;
+						gearPoints.push(rotatePoints(rotationAngleRad, gearToothPoints));
+					}
+					
+					var gear = svg.polygon(gearGroup, gearPoints, regularLinesStyle);
+					return gearGroup;
+				}
+				
+				function involuteGearTooth(
+					pitchRadius,
+					rootRadius,
+					baseRadius,
+					outerRadius,
+					halfThickAngleRad,
+					involuteFacetsCount)
+				{
+					var minRadius = Math.max(baseRadius, rootRadius); // radius of the beginning of the involute
+
+					var pitchPoint = involute(baseRadius, involuteIntersectAngleRad(baseRadius, pitchRadius));
+					var pitchAngleRad = Math.atan2(pitchPoint[1], pitchPoint[0]);
+					var centerAngleRad = pitchAngleRad + halfThickAngleRad;
+
+					var startAngleRad = involuteIntersectAngleRad(baseRadius, minRadius);
+					var stopAngleRad = involuteIntersectAngleRad(baseRadius, outerRadius);
+					var deltaRad = (stopAngleRad - startAngleRad) / involuteFacetsCount;
+
+					var points = [];
+					for (var i = 0; i < involuteFacetsCount + 1; i++) {
+						var point = involute(baseRadius, startAngleRad + deltaRad * i);
+
+						var leftSidePoint = rotatePoint(centerAngleRad, point);
+						points.push(leftSidePoint);
+					}
+					// we mirror the calculate side to create the second face of the tooth
+					for(var i = 0; i < involuteFacetsCount + 1; i++) {
+						var leftSidePoint = points[involuteFacetsCount - i];
+						var rightSidePoint = mirrorPoint(leftSidePoint);
+						points.push(rightSidePoint);
+					}
+					
+					// finally we add the straight lines from the root radius to the beginning of the involute
+					var endFirstStraightSegment = points[0];
+					var angleRad = Math.atan2(endFirstStraightSegment[1], endFirstStraightSegment[0]);
+					
+					var startFirstStraightSegment = [rootRadius * Math.cos(angleRad), rootRadius * Math.sin(angleRad)];
+					var startSecondStraightSegement = mirrorPoint(startFirstStraightSegment);
+					
+					var gearToothPoints = [startFirstStraightSegment].concat(points, [startSecondStraightSegement]);
+					return gearToothPoints;
+				}
+
+				// Mathematical Helper Functions
+
+				// Finds the angle of the involute about the base radius at the given distance (radius) from it's center.
+				//source: http://www.mathhelpforum.com/math-help/geometry/136011-circle-involute-solving-y-any-given-x.html
+				function involuteIntersectAngleRad(baseRadius, radius) {
+					return Math.sqrt(Math.pow(radius / baseRadius, 2) - 1);
+				}
+
+				// Calculate the involute position for a given base radius and involute angle.
+				function rotatedInvolute(rotateRad, baseRadius, involuteAngleRad) {
+					return [
+						Math.cos(rotateRad) * involute(baseRadius, involuteAngleRad)[0] + Math.sin(rotateRad) * involute(baseRadius, involuteAngleRad)[1],
+						Math.cos(rotateRad) * involute(baseRadius, involuteAngleRad)[1] - Math.sin(rotateRad) * involute(baseRadius, involuteAngleRad)[0]
+					];
+				}
+
+				function mirrorPoint(point) { 
+					return [
+						point[0],
+						-point[1]
+					];
+				}
+
+				function rotatePoint(rotateRad, point) {
+					var cos = Math.cos(rotateRad);
+					var sin = Math.sin(rotateRad);
+					return [
+						cos * point[0] + sin * point[1],
+						cos * point[1] - sin * point[0]
+					]
+				};
+
+				function rotatePoints(rotateRad, points) {
+					var rotatedPoints = [];
+					var cos = Math.cos(rotateRad);
+					var sin = Math.sin(rotateRad);
+					for(var i = 0; i < points.length; i++) {
+						rotatedPoints.push(
+							[
+								cos * points[i][0] + sin * points[i][1],
+								cos * points[i][1] - sin * points[i][0]
+							]
+						);
+					}
+					return rotatedPoints;
+				};
+
+				function involute(baseRadius, involuteAngleRad) {
+					return [
+						baseRadius * (Math.cos(involuteAngleRad) + involuteAngleRad * Math.sin(involuteAngleRad)),
+						baseRadius * (Math.sin(involuteAngleRad) - involuteAngleRad * Math.cos(involuteAngleRad)),
+					]
+				};
+				
+				var gear = createGear({
+					numberOfTeeth: 30,
+					circularPitch: 700,
+					pressureAngle: 20,
+					backlash: 0,
+					showHelperLines: true,
+					involuteFacetsCount: 5
+				});
+				
+				//svg.configure(gear, {transform: 'translate(-10,20)'});
+				var xml = svg.toSVG();
+				$('#result').val(xml);
+				//alert(xml);
+				
+				// based on code from Andreas K򢥲le (http://stackoverflow.com/questions/10120975/how-to-save-an-svg-generated-by-raphael)
+				var anchor = document.getElementById('download');
+				anchor.innerHTML = "Download SVG";
+				anchor.download = 'involute.svg';
+				anchor.type = 'image/svg+xml';
+				
+				// see Eric Bidelman: http://updates.html5rocks.com/2012/06/Don-t-Build-Blobs-Construct-Them
+				var blob = new Blob([xml], {type: 'image/svg+xml'});
+				anchor.href = (window.URL || webkitURL).createObjectURL(blob);
+				//a.click();
+
+
+			})
+		})(jQuery);
+</script>
+	</head>
+	<body>
+		<p><div id="svg_container" ></div></p>
+		<p><textarea id="result" cols="100" rows="2"></textarea></p>
+		<p><a id="download">test</a></p>
+	</body>
+</html>
