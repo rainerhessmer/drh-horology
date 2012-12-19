@@ -264,7 +264,6 @@ $.extend(SVGWrapper.prototype, {
 			}
 		}
 		for (var attrName in settings) {
-			if (typeof settings[attrName] !== 'function')
 			node.setAttribute($.svg._attrNames[attrName] || attrName, settings[attrName]);
 		}
 		return this;
@@ -816,7 +815,7 @@ $.extend(SVGWrapper.prototype, {
 		var node = this._svg.ownerDocument.createElementNS($.svg.svgNS, name);
 		for (var name in settings) {
 			var value = settings[name];
-			if (value != null && (typeof value !== 'function') && 
+			if (value != null && value != null && 
 					(typeof value != 'string' || value != '')) {
 				node.setAttribute($.svg._attrNames[name] || name, value);
 			}
