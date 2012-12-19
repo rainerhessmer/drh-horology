@@ -47,247 +47,324 @@
 					});
 				};
 
-				// Generic support for 'class' inheritance
-				// For details see: http://www.coolpage.com/developer/javascript/Correct%20OOP%20for%20Javascript.html
-				Object.prototype.Inherits = function(parent) {
-					if(arguments.length > 1) {
-						parent.apply(this, Array.prototype.slice.call(arguments, 1));
-					}
-					else {
-						// The following line breaks paperjs if uncommented
-						//parent.call(this);
-					}
-				}
-
-				Function.prototype.Inherits = function(parent) {
-					this.prototype = new parent();
-					this.prototype.constructor = this;
-				}
+				// Generic support for 'class' inheritance (see TypeScript playground example 'Simple Inheritance' for details (http://www.typescriptlang.org/Playground/)
+				var __extends = this.__extends || function (d, b) {
+					function __() { this.constructor = d; }
+					__.prototype = b.prototype;
+					d.prototype = new __();
+				};
 				// End generic support for 'class' inheritance
 
 
+
+
+				
 				// Start base class Gear
-				function Gear(options) {
-					var options = options || {};
+				var Gear = (function () {
+					function Gear(options) {
+						var options = options || {};
 
-					this.toothCount = options.toothCount || 30;
-					this.centerHoleDiameter = options.centerHoleDiameter || 0;
+						this.toothCount = options.toothCount || 30;
+						this.centerHoleDiameter = options.centerHoleDiameter || 0;
 
-					this._center = [0,0]; // center of the gear
-					this._angle = 0; // angle in degrees of the complete gear (changes during rotation animation)
-				}		
-				Gear.prototype.getCenter = function() {
-					return this._center;
-				}
-				Gear.prototype.setCenter = function(newCenter) {
-					this._center = newCenter;
-					this._updateSvgConfig();
-				}
-				Gear.prototype.getAngle = function() {
-					return this._angle;
-				}
-				Gear.prototype.setAngle = function(newAngle) {
-					this._setAngleNoSideEffect(newAngle)
-					if (this.connectedGear != null) {
-						// we need to turn the connected gear as well
-						var ratio = this.pitchDiameter / this.connectedGear.pitchDiameter;
-						// we need an angle offset of half a tooth for the two gears to mesh
-						var offset = 180 / this.connectedGear.numberOfTeeth;
-						this.connectedGear._setAngleNoSideEffect(offset - newAngle * ratio);
+						this._center = [0,0]; // center of the gear
+						this._angle = 0; // angle in degrees of the complete gear (changes during rotation animation)
 					}
-				}
-				Gear.prototype._setAngleNoSideEffect = function(newAngle) {
-					// does not call into a connected gear and hence does not run the risk of an infinite loop
-					this._angle = newAngle;
-					this._updateSvgConfig();
-				}
-				Gear.prototype._updateSvgConfig = function() {
-					svg.configure(this.gearGroup, {transform: "rotate({0}, {1}, {2}) translate({1},{2})".format(this._angle, this._center[0], this._center[1])});
-				}
-				Gear.prototype._insertSvgHelperLines = function(gearGroup)
-				{
-					if (this.gearSet.showHelperLines) {
-						var helperLinesGroup = svg.group(gearGroup, helperLinesStyle);
-						svg.circle(helperLinesGroup, 0, 0, this.pitchDiameter / 2);
-						svg.circle(helperLinesGroup, 0, 0, this.pitchDiameter / 2 + this.addendum);
-						svg.circle(helperLinesGroup, 0, 0, this.pitchDiameter / 2 - this.dedendum);
-						
-						var length = 5;
-						svg.line(helperLinesGroup, -length, 0, length, 0);
-						svg.line(helperLinesGroup, 0, -length, 0, length);
+					Gear.prototype.getCenter = function() {
+						return this._center;
 					}
-				}
+					Gear.prototype.setCenter = function(newCenter) {
+						this._center = newCenter;
+						this._updateSvgConfig();
+					}
+					Gear.prototype.getAngle = function() {
+						return this._angle;
+					}
+					Gear.prototype.setAngle = function(newAngle) {
+						this._setAngleNoSideEffect(newAngle)
+						if (this.connectedGear != null) {
+							// we need to turn the connected gear as well
+							var ratio = this.pitchDiameter / this.connectedGear.pitchDiameter;
+							// we need an angle offset of half a tooth for the two gears to mesh
+							var offset = 180 / this.connectedGear.numberOfTeeth;
+							this.connectedGear._setAngleNoSideEffect(offset - newAngle * ratio);
+						}
+					}
+					Gear.prototype._setAngleNoSideEffect = function(newAngle) {
+						// does not call into a connected gear and hence does not run the risk of an infinite loop
+						this._angle = newAngle;
+						this._updateSvgConfig();
+					}
+					Gear.prototype._updateSvgConfig = function() {
+						svg.configure(this.gearGroup, {transform: "rotate({0}, {1}, {2}) translate({1},{2})".format(this._angle, this._center[0], this._center[1])});
+					}
+					Gear.prototype._insertSvgHelperLines = function(gearGroup)
+					{
+						if (this.gearSet.showHelperLines) {
+							var helperLinesGroup = svg.group(gearGroup, helperLinesStyle);
+							svg.circle(helperLinesGroup, 0, 0, this.pitchDiameter / 2);
+							svg.circle(helperLinesGroup, 0, 0, this.pitchDiameter / 2 + this.addendum);
+							svg.circle(helperLinesGroup, 0, 0, this.pitchDiameter / 2 - this.dedendum);
+							
+							var length = 5;
+							svg.line(helperLinesGroup, -length, 0, length, 0);
+							svg.line(helperLinesGroup, 0, -length, 0, length);
+						}
+					}
+					return Gear;
+				})();
 
+				// Start class Tooth
+				var Tooth = (function () {
+					function Tooth(gear, centerRayAngle) {
+						this.gear = gear;
+						this.centerRayAngle = centerRayAngle;
+
+						radius = gear.pitchDiameter / 2.0 + gear.addendum;
+
+						this.apex = [
+							gear.center[0] + Math.cos(this.centerRayAngle) * radius,
+							gear.center[1] + Math.sin(this.centerRayAngle) * radius
+						];
+
+						leftFlankAngle = this.centerRayAngle - gear.halfToothAngle;
+						rightFlankAngle = this.centerRayAngle + gear.halfToothAngle;
+
+						radius = gear.pitchDiameter / 2.0 - gear.dedendum;
+						this.dedendumIntersectLeft = [
+							gear.Center[0] + Math.Cos(leftFlankAngle) * radius,
+							gear.Center[1] + Math.Sin(leftFlankAngle) * radius
+						];
+						this.DedendumIntersectRight = [
+							gear.Center[0] + Math.Cos(rightFlankAngle) * radius,
+							gear.Center[1] + Math.Sin(rightFlankAngle) * radius
+						];
+
+						radius = gear.PitchDiameter / 2.0;
+						this.PitchCircleIntersectLeft = [
+							gear.Center[0] + Math.Cos(leftFlankAngle) * radius,
+							gear.Center[1] + Math.Sin(leftFlankAngle) * radius
+						];
+						this.PitchCircleIntersectRight = [
+							gear.Center[0] + Math.Cos(rightFlankAngle) * radius,
+							gear.Center[1] + Math.Sin(rightFlankAngle) * radius
+						];
+					}
+					return Tooth;
+				})();
 				
 				
 				// Wheel class
-				Wheel.Inherits(Gear);
-				function Wheel(options)
-				{
-					this.Inherits(Gear, options)
-				}
-				Wheel.prototype.update1 = function() {
-					// update 1 calculates values that never depend on the matching gear
-					this.pitchDiameter = this.gearSet.module * this.toothCount;
-					this.addendum = this.gearSet.module * this.gearSet.practicalAddendumFactor;
-					this.addendumRadius = this.gearSet.module * 1.40 * this.gearSet.addendumFactor;
-					this.halfToothAngle = Math.PI / this.toothCount / 2;
-				}
-				Wheel.prototype.update2 = function() {
-					// stage 2 of the update; note that the dedendum can depend on the addendum of the other gear
-					if (this.gearSet.customSlopEnabled) {
-						this.dedendum = this.gearSet.pinion.addendum + this.gearSet.customSlop;
+				var Wheel = (function (_super) {
+					__extends(Wheel, _super);
+					function Wheel(options) {
+						_super.call(this, options);
 					}
-					else {
-						this.dedendum = this.gearSet.module * Math.PI / 2;
+					Wheel.prototype.update1 = function() {
+						// update 1 calculates values that never depend on the matching gear
+						this.pitchDiameter = this.gearSet.module * this.toothCount;
+						this.addendum = this.gearSet.module * this.gearSet.practicalAddendumFactor;
+						this.addendumRadius = this.gearSet.module * 1.40 * this.gearSet.addendumFactor;
+						this.halfToothAngle = Math.PI / this.toothCount / 2;
 					}
+					Wheel.prototype.update2 = function() {
+						// stage 2 of the update; note that the dedendum can depend on the addendum of the other gear
+						if (this.gearSet.customSlopEnabled) {
+							this.dedendum = this.gearSet.pinion.addendum + this.gearSet.customSlop;
+						}
+						else {
+							this.dedendum = this.gearSet.module * Math.PI / 2;
+						}
 
-					this.innerRadius = this.pitchDiameter / 2 - this.dedendum;
-					this.outerRadius = this.pitchDiameter / 2 + this.addendum;
+						this.innerRadius = this.pitchDiameter / 2 - this.dedendum;
+						this.outerRadius = this.pitchDiameter / 2 + this.addendum;
 
-					this._createSVG();
+						this._createSVG();
+					}
+					Wheel.prototype._createSVG = function()
+					{
+						this.gearGroup = svg.group();
+						this._insertSvgHelperLines(this.gearGroup);
+					}
+					return Wheel;
+				})(Gear);
+				
+				// WheelTooth class
+				var WheelTooth = (function (_super) {
+					__extends(WheelTooth, _super);
+					function WheelTooth(gear, centerRayAngle) {
+						_super.call(this, gear, centerRayAngle);
+						// Arc from left intersection with pitch circle to apex
+						v1 = [this.apex, this.pitchCircleIntersectRight];
+						halfArcAngle = Math.asin(v1.Magnitude / this.gear.addendumRadius / 2.0);
+
+						l = this.gear.addendumRadius * Math.cos(halfArcAngle);
+						v1Normal = vectorNormal(v1);
+
+						this.AddendumCircleCenterLeft = [
+							this.pitchCircleIntersectRight[0] + v1[0] / 2 - v1Normal[0] * l,
+							this.pitchCircleIntersectRight[1] + v1[1] / 2 - v1Normal[1] * l
+						],
+
+						v2 = [this.apex, this.pitchCircleIntersectLeft];
+						v2Normal = vectorNormal(v2);
+						this.addendumCircleCenterRight = [
+							this.pitchCircleIntersectLeft[0] + v2[0] / 2 + v2Normal[0] * l,
+							this.pitchCircleIntersectLeft[1] + v2[1] / 2 + v2Normal[1] * l
+						];
+					}
+					return WheelTooth;
+				})(Tooth);
+				
+				// vector functions
+				function vectorLength(v) {
+					return Math.sqrt(v[0] * v[0] + v[1] * v[1]);
 				}
-				Wheel.prototype._createSVG = function()
-				{
-					this.gearGroup = svg.group();
-					this._insertSvgHelperLines(this.gearGroup);
+				
+				function vectorNormal(v) {
+					length = vectorLength(v);
+					return [-v[1] / length, v[0] / length];
 				}
-
 				
 				
 				// Pinion class
-				Pinion.Inherits(Gear);
-				function Pinion(options)
-				{
-					this.Inherits(Gear, options)
-				}
-				Pinion.prototype.update1 = function() {
-					// update 1 calculates values that never depend on the matching gear
-					this.pitchDiameter = this.gearSet.module * this.toothCount;
-					this._initializeToothAngle();
-					this._initializeAddendum();
-				}
-				Pinion.prototype.update2 = function() {
-					// stage 2 of the update; note that the dedendum can depend on the addendum of the other gear
-					if (this.gearSet.customSlopEnabled) {
-						this.dedendum = this.gearSet.wheel.addendum + this.gearSet.customSlop;
+				var Pinion = (function (_super) {
+					__extends(Pinion, _super);
+					function Pinion(options) {
+						_super.call(this, options);
 					}
-					else {
-						this.dedendum = this.gearSet.module * (this.gearSet.practicalAddendumFactor + 0.4);
+					Pinion.prototype.update1 = function() {
+						// update 1 calculates values that never depend on the matching gear
+						this.pitchDiameter = this.gearSet.module * this.toothCount;
+						this._initializeToothAngle();
+						this._initializeAddendum();
 					}
-					
-					this.innerRadius = this.pitchDiameter / 2 - this.dedendum;
-					this.outerRadius = this.pitchDiameter / 2 + this.addendum;
+					Pinion.prototype.update2 = function() {
+						// stage 2 of the update; note that the dedendum can depend on the addendum of the other gear
+						if (this.gearSet.customSlopEnabled) {
+							this.dedendum = this.gearSet.wheel.addendum + this.gearSet.customSlop;
+						}
+						else {
+							this.dedendum = this.gearSet.module * (this.gearSet.practicalAddendumFactor + 0.4);
+						}
+						
+						this.innerRadius = this.pitchDiameter / 2 - this.dedendum;
+						this.outerRadius = this.pitchDiameter / 2 + this.addendum;
 
-					this._createSVG();
-				}
-				Pinion.prototype._initializeToothAngle = function() {
-					// From http://www.csparks.com/watchmaking/CycloidalGears/index.jhtml:
-					// The nominal width of a tooth or a space when they are equally spaced is just pi/2, or about 1.57.
-					// For pinions, we will reduce the width of the tooth a bit. For pinions with 6-10 leaves, the tooth
-					// width at the pitch circle is 1.05. For pinions with 11 or more teeth the tooth width is 1.25. 
-					var factor = 0;
-					if (this.toothCount <= 10) {
-						factor = 1.05;
+						this._createSVG();
 					}
-					else {
-						factor = 1.25;
-					}
+					Pinion.prototype._initializeToothAngle = function() {
+						// From http://www.csparks.com/watchmaking/CycloidalGears/index.jhtml:
+						// The nominal width of a tooth or a space when they are equally spaced is just pi/2, or about 1.57.
+						// For pinions, we will reduce the width of the tooth a bit. For pinions with 6-10 leaves, the tooth
+						// width at the pitch circle is 1.05. For pinions with 11 or more teeth the tooth width is 1.25. 
+						var factor = 0;
+						if (this.toothCount <= 10) {
+							factor = 1.05;
+						}
+						else {
+							factor = 1.25;
+						}
 
-					//factor = Math.PI / 2;
-					this.halfToothAngle = factor * this.gearSet.module / this.pitchDiameter;
-				}
-				Pinion.prototype._initializeAddendum = function() {
-					// For details see the Profile - Leaves tables in http://www.csparks.com/watchmaking/CycloidalGears/index.jhtml
-					if (this.toothCount <= 7) {
-						// high ogival
-						this.addendum = 0.855 * this.gearSet.module;
-						this.addendumRadius = 1.050 * this.gearSet.module;
+						//factor = Math.PI / 2;
+						this.halfToothAngle = factor * this.gearSet.module / this.pitchDiameter;
 					}
-					else if (this.toothCount == 8 || this.toothCount == 9) {
-						// medium ogival
-						this.addendum = 0.670 * this.gearSet.module;
-						this.addendumRadius = 0.7 * this.gearSet.module;
+					Pinion.prototype._initializeAddendum = function() {
+						// For details see the Profile - Leaves tables in http://www.csparks.com/watchmaking/CycloidalGears/index.jhtml
+						if (this.toothCount <= 7) {
+							// high ogival
+							this.addendum = 0.855 * this.gearSet.module;
+							this.addendumRadius = 1.050 * this.gearSet.module;
+						}
+						else if (this.toothCount == 8 || this.toothCount == 9) {
+							// medium ogival
+							this.addendum = 0.670 * this.gearSet.module;
+							this.addendumRadius = 0.7 * this.gearSet.module;
+						}
+						else if (this.toothCount == 10) {
+							// round top for small tooth
+							this.addendum = 0.525 * this.gearSet.module;
+							this.addendumRadius = 0.525 * this.gearSet.module;
+						}
+						else {
+							// 11+ teeth, round top for wider tooth
+							this.addendum = 0.625 * this.gearSet.module;
+							this.addendumRadius = 0.625 * this.gearSet.module;
+						}
 					}
-					else if (this.toothCount == 10) {
-						// round top for small tooth
-						this.addendum = 0.525 * this.gearSet.module;
-						this.addendumRadius = 0.525 * this.gearSet.module;
+					Pinion.prototype._createSVG = function()
+					{
+						this.gearGroup = svg.group();
+						this._insertSvgHelperLines(this.gearGroup);
 					}
-					else {
-						// 11+ teeth, round top for wider tooth
-						this.addendum = 0.625 * this.gearSet.module;
-						this.addendumRadius = 0.625 * this.gearSet.module;
-					}
-				}
-				Pinion.prototype._createSVG = function()
-				{
-					this.gearGroup = svg.group();
-					this._insertSvgHelperLines(this.gearGroup);
-				}
-
+					return Wheel;
+				})(Gear);
+				
 
 				// GearSet class
-				function GearSet(wheel, pinion, options) {
-					wheel.gearSet = this;
-					wheel.connectedGear = pinion;
-					this.wheel = wheel;
-					
-					pinion.gearSet = this;
-					pinion.connectedGear = wheel;
-					this.pinion = pinion;
+				var GearSet = (function () {
+					function GearSet(wheel, pinion, options) {
+						wheel.gearSet = this;
+						wheel.connectedGear = pinion;
+						this.wheel = wheel;
+						
+						pinion.gearSet = this;
+						pinion.connectedGear = wheel;
+						this.pinion = pinion;
 
-					var options = options || {};
+						var options = options || {};
 
-					this.module = options.module || 4; // module mm. The width of a tooth-space pair is always π modules and the pitch diameter of the gear is equal to the module times the number of teeth.
-					if (options.customSlop === undefined) {
-						this.customSlopEnabled = false;
+						this.module = options.module || 4; // module mm. The width of a tooth-space pair is always π modules and the pitch diameter of the gear is equal to the module times the number of teeth.
+						if (options.customSlop === undefined) {
+							this.customSlopEnabled = false;
+						}
+						else {
+							this.customSlopEnabled = true;
+							this.customSlop = options.customSlop; // The slop in mm between the apex of one gear and the trough of the other. Only used if custom slop is enabled. Otherwise the default as described by Hugh Sparks is used.
+						}
+						this.showHelperLines = options.showHelperLines || true;
+						this.update();
 					}
-					else {
-						this.customSlopEnabled = true;
-						this.customSlop = options.customSlop; // The slop in mm between the apex of one gear and the trough of the other. Only used if custom slop is enabled. Otherwise the default as described by Hugh Sparks is used.
-					}
-					this.showHelperLines = options.showHelperLines || true;
-					this.update();
-				}		
-				GearSet.prototype.update = function() {
-					if (this.pinion.toothCount <= 0 || this.wheel.toothCount <= 0 || this.module <= 0) {
-						// TODO: set all outputs to zero
-					}
-					else {
-						this.addendumFactor = this._calcAddendumFactor(this.wheel.toothCount, this.pinion.toothCount);
-						this.practicalAddendumFactor = 0.95 * this.addendumFactor;
-						this.gearRatio = this.wheel.toothCount / this.pinion.toothCount;
+					GearSet.prototype.update = function() {
+						if (this.pinion.toothCount <= 0 || this.wheel.toothCount <= 0 || this.module <= 0) {
+							// TODO: set all outputs to zero
+						}
+						else {
+							this.addendumFactor = this._calcAddendumFactor(this.wheel.toothCount, this.pinion.toothCount);
+							this.practicalAddendumFactor = 0.95 * this.addendumFactor;
+							this.gearRatio = this.wheel.toothCount / this.pinion.toothCount;
 
-						this.circularPitch = this.module * Math.PI;
-					}
+							this.circularPitch = this.module * Math.PI;
+						}
 
-					this.wheel.update1();
-					this.pinion.update1();
-					this.wheel.update2();
-					this.pinion.update2();
-					this.wheelPinionDistance = (this.wheel.pitchDiameter + this.pinion.pitchDiameter) / 2.0;
-				}
-				GearSet.prototype._calcAddendumFactor = function() {
-					var beta = 0.0;
-					var theta = 1.0 ;
-					var thetaNew = 0.0 ;
-					var R = this.wheel.toothCount / this.pinion.toothCount; // gear ratio
-					while (Math.abs(thetaNew - theta) > c_ErrorLimit)
-					{
+						this.wheel.update1();
+						this.pinion.update1();
+						this.wheel.update2();
+						this.pinion.update2();
+						this.wheelPinionDistance = (this.wheel.pitchDiameter + this.pinion.pitchDiameter) / 2.0;
+					}
+					GearSet.prototype._calcAddendumFactor = function() {
+						var beta = 0.0;
+						var theta = 1.0 ;
+						var thetaNew = 0.0 ;
+						var R = this.wheel.toothCount / this.pinion.toothCount; // gear ratio
+						while (Math.abs(thetaNew - theta) > c_ErrorLimit)
+						{
+							theta = thetaNew;
+							beta = Math.atan2(Math.sin(theta), (1.0 + 2 * R - Math.cos(theta))) ;
+							thetaNew = Math.PI/this.pinion.toothCount + 2 * R * beta ;	
+						}
+
 						theta = thetaNew;
-						beta = Math.atan2(Math.sin(theta), (1.0 + 2 * R - Math.cos(theta))) ;
-						thetaNew = Math.PI/this.pinion.toothCount + 2 * R * beta ;	
+
+						k = 1.0 + 2 * R;
+
+						// addendum factor af
+						addendumFactor = this.pinion.toothCount / 4.0 * (1.0 - k + Math.sqrt( 1.0 + k * k - 2.0 * k * Math.cos(theta)) );
+						return addendumFactor;
 					}
-
-					theta = thetaNew;
-
-					k = 1.0 + 2 * R;
-
-					// addendum factor af
-					addendumFactor = this.pinion.toothCount / 4.0 * (1.0 - k + Math.sqrt( 1.0 + k * k - 2.0 * k * Math.cos(theta)) );
-					return addendumFactor;
-				}
+					return GearSet;
+				})();
 
 				var wheel = new Wheel({
 					toothCount: 30,
