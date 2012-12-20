@@ -56,9 +56,6 @@
 				// End generic support for 'class' inheritance
 
 
-
-
-				
 				// Start base class Gear
 				var Gear = (function () {
 					function Gear(options) {
@@ -86,7 +83,7 @@
 							// we need to turn the connected gear as well
 							var ratio = this.pitchDiameter / this.connectedGear.pitchDiameter;
 							// we need an angle offset of half a tooth for the two gears to mesh
-							var offset = 180 / this.connectedGear.numberOfTeeth;
+							var offset = 180 + 180 / this.connectedGear.toothCount;
 							this.connectedGear._setAngleNoSideEffect(offset - newAngle * ratio);
 						}
 					}
@@ -97,6 +94,24 @@
 					}
 					Gear.prototype._updateSvgConfig = function() {
 						svg.configure(this.gearGroup, {transform: "rotate({0}, {1}, {2}) translate({1},{2})".format(this._angle, this._center[0], this._center[1])});
+					}
+					Gear.prototype._createSVG = function()
+					{
+						this.gearGroup = svg.group();
+						this._insertSvgHelperLines(this.gearGroup);
+
+						var teeth = this._getTeeth();
+						var path = svg.createPath();
+						path.move(teeth[0].dedendumIntersectLeft[0], teeth[0].dedendumIntersectLeft[1]);
+
+						for (var i = 0; i < teeth.length; i++)
+						{
+							tooth = teeth[i];
+							nextTooth = teeth[(i + 1) % teeth.length];
+							this._insertWheelToothPath(tooth, nextTooth, path);
+						}
+						path.close();
+						svg.path(this.gearGroup, path, regularLinesStyle);
 					}
 					Gear.prototype._insertSvgHelperLines = function(gearGroup)
 					{
@@ -111,6 +126,24 @@
 							svg.line(helperLinesGroup, 0, -length, 0, length);
 						}
 					}
+					Gear.prototype._getTeeth = function() {
+						wheelTeeth = [];
+						angleBetweenTeeth = 2 * Math.PI / this.toothCount;
+						for (var i = 0; i < this.toothCount; i++) {
+							centerRayAngle = i * angleBetweenTeeth;
+							wheelTeeth[i] = new Tooth(this, centerRayAngle);
+						}
+						return wheelTeeth;
+					}
+					Gear.prototype._insertWheelToothPath = function(tooth, nextTooth, path) {
+						path.line(tooth.pitchCircleIntersectLeft[0], tooth.pitchCircleIntersectLeft[1]);
+						path.arc(this.addendumRadius, this.addendumRadius, 0, 0, 1, tooth.apex[0], tooth.apex[1]);
+						path.arc(this.addendumRadius, this.addendumRadius, 0, 0, 1, tooth.pitchCircleIntersectRight[0], tooth.pitchCircleIntersectRight[1]);
+						path.line(tooth.dedendumIntersectRight[0], tooth.dedendumIntersectRight[1]);
+
+						radius = this.pitchDiameter / 2.0 - this.dedendum;
+						path.arc(radius, radius, 0, 0, 1, nextTooth.dedendumIntersectLeft[0], nextTooth.dedendumIntersectLeft[1]);
+					}
 					return Gear;
 				})();
 
@@ -120,34 +153,34 @@
 						this.gear = gear;
 						this.centerRayAngle = centerRayAngle;
 
-						radius = gear.pitchDiameter / 2.0 + gear.addendum;
+						var radius = gear.pitchDiameter / 2.0 + gear.addendum;
 
 						this.apex = [
-							gear.center[0] + Math.cos(this.centerRayAngle) * radius,
-							gear.center[1] + Math.sin(this.centerRayAngle) * radius
+							gear._center[0] + Math.cos(this.centerRayAngle) * radius,
+							gear._center[1] + Math.sin(this.centerRayAngle) * radius
 						];
 
-						leftFlankAngle = this.centerRayAngle - gear.halfToothAngle;
-						rightFlankAngle = this.centerRayAngle + gear.halfToothAngle;
+						var leftFlankAngle = this.centerRayAngle - gear.halfToothAngle;
+						var rightFlankAngle = this.centerRayAngle + gear.halfToothAngle;
 
 						radius = gear.pitchDiameter / 2.0 - gear.dedendum;
 						this.dedendumIntersectLeft = [
-							gear.Center[0] + Math.Cos(leftFlankAngle) * radius,
-							gear.Center[1] + Math.Sin(leftFlankAngle) * radius
+							gear._center[0] + Math.cos(leftFlankAngle) * radius,
+							gear._center[1] + Math.sin(leftFlankAngle) * radius
 						];
-						this.DedendumIntersectRight = [
-							gear.Center[0] + Math.Cos(rightFlankAngle) * radius,
-							gear.Center[1] + Math.Sin(rightFlankAngle) * radius
+						this.dedendumIntersectRight = [
+							gear._center[0] + Math.cos(rightFlankAngle) * radius,
+							gear._center[1] + Math.sin(rightFlankAngle) * radius
 						];
 
-						radius = gear.PitchDiameter / 2.0;
-						this.PitchCircleIntersectLeft = [
-							gear.Center[0] + Math.Cos(leftFlankAngle) * radius,
-							gear.Center[1] + Math.Sin(leftFlankAngle) * radius
+						radius = gear.pitchDiameter / 2.0;
+						this.pitchCircleIntersectLeft = [
+							gear._center[0] + Math.cos(leftFlankAngle) * radius,
+							gear._center[1] + Math.sin(leftFlankAngle) * radius
 						];
-						this.PitchCircleIntersectRight = [
-							gear.Center[0] + Math.Cos(rightFlankAngle) * radius,
-							gear.Center[1] + Math.Sin(rightFlankAngle) * radius
+						this.pitchCircleIntersectRight = [
+							gear._center[0] + Math.cos(rightFlankAngle) * radius,
+							gear._center[1] + Math.sin(rightFlankAngle) * radius
 						];
 					}
 					return Tooth;
@@ -181,50 +214,8 @@
 
 						this._createSVG();
 					}
-					Wheel.prototype._createSVG = function()
-					{
-						this.gearGroup = svg.group();
-						this._insertSvgHelperLines(this.gearGroup);
-					}
 					return Wheel;
 				})(Gear);
-				
-				// WheelTooth class
-				var WheelTooth = (function (_super) {
-					__extends(WheelTooth, _super);
-					function WheelTooth(gear, centerRayAngle) {
-						_super.call(this, gear, centerRayAngle);
-						// Arc from left intersection with pitch circle to apex
-						v1 = [this.apex, this.pitchCircleIntersectRight];
-						halfArcAngle = Math.asin(v1.Magnitude / this.gear.addendumRadius / 2.0);
-
-						l = this.gear.addendumRadius * Math.cos(halfArcAngle);
-						v1Normal = vectorNormal(v1);
-
-						this.AddendumCircleCenterLeft = [
-							this.pitchCircleIntersectRight[0] + v1[0] / 2 - v1Normal[0] * l,
-							this.pitchCircleIntersectRight[1] + v1[1] / 2 - v1Normal[1] * l
-						],
-
-						v2 = [this.apex, this.pitchCircleIntersectLeft];
-						v2Normal = vectorNormal(v2);
-						this.addendumCircleCenterRight = [
-							this.pitchCircleIntersectLeft[0] + v2[0] / 2 + v2Normal[0] * l,
-							this.pitchCircleIntersectLeft[1] + v2[1] / 2 + v2Normal[1] * l
-						];
-					}
-					return WheelTooth;
-				})(Tooth);
-				
-				// vector functions
-				function vectorLength(v) {
-					return Math.sqrt(v[0] * v[0] + v[1] * v[1]);
-				}
-				
-				function vectorNormal(v) {
-					length = vectorLength(v);
-					return [-v[1] / length, v[0] / length];
-				}
 				
 				
 				// Pinion class
@@ -292,12 +283,7 @@
 							this.addendumRadius = 0.625 * this.gearSet.module;
 						}
 					}
-					Pinion.prototype._createSVG = function()
-					{
-						this.gearGroup = svg.group();
-						this._insertSvgHelperLines(this.gearGroup);
-					}
-					return Wheel;
+					return Pinion;
 				})(Gear);
 				
 
@@ -324,6 +310,7 @@
 						}
 						this.showHelperLines = options.showHelperLines || true;
 						this.update();
+						this.wheel.setAngle(0);
 					}
 					GearSet.prototype.update = function() {
 						if (this.pinion.toothCount <= 0 || this.wheel.toothCount <= 0 || this.module <= 0) {
@@ -372,7 +359,7 @@
 				});
 
 				var pinion = new Pinion({
-					toothCount: 8,
+					toothCount: 6,
 					centerHoleDiameter: 4
 				});
 				
@@ -382,11 +369,9 @@
 					{
 						module: 4,
 						showHelperLines: true,
-						customSlop: 0
+						//customSlop: 0
 					}
 				);
-				
-				//gear1.setCenter([-10,0]);
 
 				var border = 5;
 				var width = wheel.outerRadius + pinion.outerRadius + gearSet.wheelPinionDistance + 2 * border;
@@ -419,7 +404,7 @@
 				anchor.href = (window.URL || webkitURL).createObjectURL(blob);
 				//a.click();
 				
-				//animate();
+				animate();
 				
 				function animate() {
 					var angle = 0;
@@ -432,7 +417,7 @@
 							lastFrame = now;
 							
 							angle += rotationAnglePerSec * deltaT / 1000;
-							gear1.setAngle(angle);
+							wheel.setAngle(angle);
 						},
 						50
 					);
