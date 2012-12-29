@@ -12,6 +12,7 @@
 	<!--script type="text/javascript" src="//ajax.googleapis.com/ajax/libs/jquery/1.8.2/jquery.min.js"></script-->
 	<script type="text/javascript" src="./lib/js/jquery-1.8.3.min.js"></script>
 	<script type="text/javascript" src="./lib/js/jquery.svg.js"></script>
+	<script type="text/javascript" src="./lib/js/TwoD.js"></script>
 
 	<script type="text/javascript">
 		(function ($) {
@@ -255,22 +256,22 @@
 						for(var i = 0; i < this.circleCount; i++) {
 							var angle = deltaAngle * i;
 							
-							var c1 = polar2Cartesian(this.centerRadius, angle);							
-							var c2 = polar2Cartesian(this.centerRadius, angle + deltaAngle);
+							var c1 = TwoD.polar2Cartesian(this.centerRadius, angle);							
+							var c2 = TwoD.polar2Cartesian(this.centerRadius, angle + deltaAngle);
 
 							svg.circle(this.decorationGroup, c1[0], c1[1], this.innerCircleRadius);
 
 							//svg.circle(this.decorationGroup, c1[0], c1[1], this.outerCircleRadius);
 							
-							var circleIntersections = twoCirclesIntersections(c1, this.outerCircleRadius, c2, this.outerCircleRadius);
+							var circleIntersections = TwoD.twoCirclesIntersections(c1, this.outerCircleRadius, c2, this.outerCircleRadius);
 							var intersectCenter = circleIntersections.p1;
 							//svg.circle(this.decorationGroup, intersectCenter[0], intersectCenter[1], 1);
 
-							circleIntersections = twoCirclesIntersections(c0, this.innerRimRadius, c1, this.outerCircleRadius);
+							circleIntersections = TwoD.twoCirclesIntersections(c0, this.innerRimRadius, c1, this.outerCircleRadius);
 							var intersectLeft = circleIntersections.p0;
 							//svg.circle(this.decorationGroup, intersectLeft[0], intersectLeft[1], 1);
 
-							circleIntersections = twoCirclesIntersections(c0, this.innerRimRadius, c2, this.outerCircleRadius);
+							circleIntersections = TwoD.twoCirclesIntersections(c0, this.innerRimRadius, c2, this.outerCircleRadius);
 							var intersectRight = circleIntersections.p1;
 							//svg.circle(this.decorationGroup, intersectRight[0], intersectRight[1], 1);
 
@@ -287,35 +288,6 @@
 					}
 					return CircularHolesDecoration;
 				})(WheelDecoration);
-
-				// c0: center of the first circle in the form [x,y]
-				// r0: radius of the first circle
-				// c1, r1: corresponding values for the second circle
-				// equation see http://www.ambrsoft.com/TrigoCalc/Circles2/Circle2.htm
-				function twoCirclesIntersections(c0, r0, c1, r1) {
-					// distance between the two circle centers
-					var D = distance2d(c0, c1);
-					var delta = 0.25 * Math.sqrt((D + r0 + r1) * (D + r0 - r1) * (D - r0 + r1) * (-D + r0 + r1));
-					
-					var xPart1 = (c0[0] + c1[0])/2 + (c1[0] - c0[0])*(r0*r0 - r1*r1)/2/D/D;
-					var xPart2 = 2 * (c0[1] - c1[1])/D/D*delta
-
-					var yPart1 = (c0[1] + c1[1])/2 + (c1[1] - c0[1])*(r0*r0 - r1*r1)/2/D/D;
-					var yPart2 = 2 * (c0[0] - c1[0])/D/D*delta
-					
-					return {
-						p0: [xPart1 + xPart2, yPart1 - yPart2],
-						p1: [xPart1 - xPart2, yPart1 + yPart2]
-					};
-				}
-				
-				function distance2d(p0, p1) {
-					return Math.sqrt((p0[0] - p1[0]) * (p0[0] - p1[0]) + (p0[1] - p1[1]) * (p0[1] - p1[1]));
-				}
-				
-				function polar2Cartesian(r, theta) {
-					return [r * Math.cos(theta), r * Math.sin(theta)];
-				}
 				
 				// Pinion class
 				var Pinion = (function (_super) {
@@ -513,7 +485,7 @@
 				anchor.href = (window.URL || webkitURL).createObjectURL(blob);
 				//a.click();
 				
-				//animate();
+				animate();
 				
 				function animate() {
 					var angle = 0;
