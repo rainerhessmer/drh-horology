@@ -95,7 +95,7 @@
 					Gear.prototype._updateSvgConfig = function() {
 						svg.configure(this.gearGroup, {transform: "rotate({0}, {1}, {2}) translate({1},{2})".format(this._angle, this._center[0], this._center[1])});
 					}
-					Gear.prototype._createSVG = function()
+					Gear.prototype.createSVG = function()
 					{
 						this.gearGroup = svg.group();
 						this._insertSvgHelperLines(this.gearGroup);
@@ -186,12 +186,13 @@
 					return Tooth;
 				})();
 				
-				
+
 				// Wheel class
 				var Wheel = (function (_super) {
 					__extends(Wheel, _super);
 					function Wheel(options) {
 						_super.call(this, options);
+						this.wheelDecoration = options.wheelDecoration;
 					}
 					Wheel.prototype.update1 = function() {
 						// update 1 calculates values that never depend on the matching gear
@@ -211,12 +212,110 @@
 
 						this.innerRadius = this.pitchDiameter / 2 - this.dedendum;
 						this.outerRadius = this.pitchDiameter / 2 + this.addendum;
-
-						this._createSVG();
 					}
+					Wheel.prototype.createSVG = function() {
+						_super.prototype.createSVG.call(this);
+						if (this.wheelDecoration) {
+							this.wheelDecoration.createSVG(this.gearGroup);
+						}
+					}				
 					return Wheel;
 				})(Gear);
+
+
+				// Base class WheelDecoration
+				var WheelDecoration = (function () {
+					function WheelDecoration(wheel) {
+						this._wheel = wheel; // the wheel to decorate
+						wheel.wheelDecoration = this;
+					}
+					return WheelDecoration;
+				})();				
+
+				// Wheel CircularHolesDecoration
+				var CircularHolesDecoration = (function (_super) {
+					__extends(CircularHolesDecoration, _super);
+					function CircularHolesDecoration(wheel, options) {
+						_super.call(this, wheel);
+						var options = options || {};
+
+						this.circleCount = options.circleCount || 3;
+						this.innerRimRadius = options.innerRimRadius || wheel.innerRadius * 0.9; // the radius where the circular holes are furthest away from the center of the wheel
+						this.innerCircleRadius = options.innerCircleRadius || this.innerRimRadius / 2 * 0.8; // the radius of the holes cut into the wheel's face
+						this.outerCircleRadius = options.outerCircleRadius || this.innerRimRadius / 2 * 1.04; // the radius of the holes cut into the wheel's face
+						this.centerRadius = options.centerRadius || this.innerRimRadius - this.innerCircleRadius; // the radius of the circle that the centers of the circles on the wheel's face lie on. 
+					}
+					CircularHolesDecoration.prototype.createSVG = function(gearGroup)
+					{
+						this.decorationGroup = svg.group(gearGroup, regularLinesStyle);
+						var c0 = [0,0];
+						//svg.circle(this.decorationGroup, c0[0], c0[1], this.innerRimRadius);
+						var deltaAngle = 2 * Math.PI / this.circleCount; // angular distance between circles
+						
+						for(var i = 0; i < this.circleCount; i++) {
+							var angle = deltaAngle * i;
+							
+							var c1 = polar2Cartesian(this.centerRadius, angle);							
+							var c2 = polar2Cartesian(this.centerRadius, angle + deltaAngle);
+
+							svg.circle(this.decorationGroup, c1[0], c1[1], this.innerCircleRadius);
+
+							//svg.circle(this.decorationGroup, c1[0], c1[1], this.outerCircleRadius);
+							
+							var circleIntersections = twoCirclesIntersections(c1, this.outerCircleRadius, c2, this.outerCircleRadius);
+							var intersectCenter = circleIntersections.p1;
+							//svg.circle(this.decorationGroup, intersectCenter[0], intersectCenter[1], 1);
+
+							circleIntersections = twoCirclesIntersections(c0, this.innerRimRadius, c1, this.outerCircleRadius);
+							var intersectLeft = circleIntersections.p0;
+							//svg.circle(this.decorationGroup, intersectLeft[0], intersectLeft[1], 1);
+
+							circleIntersections = twoCirclesIntersections(c0, this.innerRimRadius, c2, this.outerCircleRadius);
+							var intersectRight = circleIntersections.p1;
+							//svg.circle(this.decorationGroup, intersectRight[0], intersectRight[1], 1);
+
+							var path = svg.createPath();
+							path.move(intersectCenter[0], intersectCenter[1]);
+							
+							path.arc(this.outerCircleRadius, this.outerCircleRadius, 0, 0, 0, intersectLeft[0], intersectLeft[1]);
+							path.arc(this.innerRimRadius, this.innerRimRadius, 0, 0, 1, intersectRight[0], intersectRight[1]);
+							path.arc(this.outerCircleRadius, this.outerCircleRadius, 0, 0, 0, intersectCenter[0], intersectCenter[1]);
+
+							path.close();
+							svg.path(this.decorationGroup, path, regularLinesStyle);
+						}
+					}
+					return CircularHolesDecoration;
+				})(WheelDecoration);
+
+				// c0: center of the first circle in the form [x,y]
+				// r0: radius of the first circle
+				// c1, r1: corresponding values for the second circle
+				// equation see http://www.ambrsoft.com/TrigoCalc/Circles2/Circle2.htm
+				function twoCirclesIntersections(c0, r0, c1, r1) {
+					// distance between the two circle centers
+					var D = distance2d(c0, c1);
+					var delta = 0.25 * Math.sqrt((D + r0 + r1) * (D + r0 - r1) * (D - r0 + r1) * (-D + r0 + r1));
+					
+					var xPart1 = (c0[0] + c1[0])/2 + (c1[0] - c0[0])*(r0*r0 - r1*r1)/2/D/D;
+					var xPart2 = 2 * (c0[1] - c1[1])/D/D*delta
+
+					var yPart1 = (c0[1] + c1[1])/2 + (c1[1] - c0[1])*(r0*r0 - r1*r1)/2/D/D;
+					var yPart2 = 2 * (c0[0] - c1[0])/D/D*delta
+					
+					return {
+						p0: [xPart1 + xPart2, yPart1 - yPart2],
+						p1: [xPart1 - xPart2, yPart1 + yPart2]
+					};
+				}
 				
+				function distance2d(p0, p1) {
+					return Math.sqrt((p0[0] - p1[0]) * (p0[0] - p1[0]) + (p0[1] - p1[1]) * (p0[1] - p1[1]));
+				}
+				
+				function polar2Cartesian(r, theta) {
+					return [r * Math.cos(theta), r * Math.sin(theta)];
+				}
 				
 				// Pinion class
 				var Pinion = (function (_super) {
@@ -242,7 +341,6 @@
 						this.innerRadius = this.pitchDiameter / 2 - this.dedendum;
 						this.outerRadius = this.pitchDiameter / 2 + this.addendum;
 
-						this._createSVG();
 					}
 					Pinion.prototype._initializeToothAngle = function() {
 						// From http://www.csparks.com/watchmaking/CycloidalGears/index.jhtml:
@@ -310,7 +408,7 @@
 						}
 						this.showHelperLines = options.showHelperLines || true;
 						this.update();
-						this.wheel.setAngle(0);
+						//this.wheel.setAngle(0);
 					}
 					GearSet.prototype.update = function() {
 						if (this.pinion.toothCount <= 0 || this.wheel.toothCount <= 0 || this.module <= 0) {
@@ -350,6 +448,11 @@
 						addendumFactor = this.pinion.toothCount / 4.0 * (1.0 - k + Math.sqrt( 1.0 + k * k - 2.0 * k * Math.cos(theta)) );
 						return addendumFactor;
 					}
+					GearSet.prototype.createSVG = function() {
+						this.wheel.createSVG();
+						this.pinion.createSVG();
+					}
+
 					return GearSet;
 				})();
 
@@ -357,6 +460,8 @@
 					toothCount: 30,
 					centerHoleDiameter: 4
 				});
+				
+
 
 				var pinion = new Pinion({
 					toothCount: 6,
@@ -372,6 +477,10 @@
 						//customSlop: 0
 					}
 				);
+
+				var wheelDecoration = new CircularHolesDecoration(wheel);
+				
+				gearSet.createSVG();
 
 				var border = 5;
 				var width = wheel.outerRadius + pinion.outerRadius + gearSet.wheelPinionDistance + 2 * border;
@@ -404,7 +513,7 @@
 				anchor.href = (window.URL || webkitURL).createObjectURL(blob);
 				//a.click();
 				
-				animate();
+				//animate();
 				
 				function animate() {
 					var angle = 0;
