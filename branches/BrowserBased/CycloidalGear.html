@@ -241,13 +241,15 @@
 						var options = options || {};
 
 						this.circleCount = options.circleCount || 3;
-						this.innerRimRadius = options.innerRimRadius || wheel.innerRadius * 0.9; // the radius where the circular holes are furthest away from the center of the wheel
+						this.innerRimRadius = options.innerRimRadius || wheel.innerRadius * 0.91; // the radius where the circular holes are furthest away from the center of the wheel
 						this.innerCircleRadius = options.innerCircleRadius || this.innerRimRadius / 2 * 0.8; // the radius of the holes cut into the wheel's face
-						this.outerCircleRadius = options.outerCircleRadius || this.innerRimRadius / 2 * 1.04; // the radius of the holes cut into the wheel's face
-						this.centerRadius = options.centerRadius || this.innerRimRadius - this.innerCircleRadius; // the radius of the circle that the centers of the circles on the wheel's face lie on. 
+						this.centerRadius = options.centerRadius || this.innerRimRadius - this.innerCircleRadius; // the radius of the circle that the centers of the circles on the wheel's face lie on.
+
+						var rimThickness = wheel.innerRadius - this.innerRimRadius;
+						this.outerCircleRadius = options.outerCircleRadius || this.innerCircleRadius + rimThickness;  //* 1.02; // the radius of the holes cut into the wheel's face
+						this.filletRadius = options.filletRadius || this.innerRimRadius * 0.04; // the radius of the fillet circle that rounds out the cuts in between the circles.
 					}
-					CircularHolesDecoration.prototype.createSVG = function(gearGroup)
-					{
+					CircularHolesDecoration.prototype.createSVG = function(gearGroup) {
 						this.decorationGroup = svg.group(gearGroup, regularLinesStyle);
 						var c0 = [0,0];
 						//svg.circle(this.decorationGroup, c0[0], c0[1], this.innerRimRadius);
@@ -256,36 +258,121 @@
 						for(var i = 0; i < this.circleCount; i++) {
 							var angle = deltaAngle * i;
 							
-							var c1 = TwoD.polar2Cartesian(this.centerRadius, angle);							
-							var c2 = TwoD.polar2Cartesian(this.centerRadius, angle + deltaAngle);
-
+							var c1 = TwoD.polar2Cartesian(this.centerRadius, angle);                // center of the inner circle at the current angle
+							var c2 = TwoD.polar2Cartesian(this.centerRadius, angle + deltaAngle);   // center of the next inner circle
 							svg.circle(this.decorationGroup, c1[0], c1[1], this.innerCircleRadius);
-
 							//svg.circle(this.decorationGroup, c1[0], c1[1], this.outerCircleRadius);
 							
-							var circleIntersections = TwoD.twoCirclesIntersections(c1, this.outerCircleRadius, c2, this.outerCircleRadius);
-							var intersectCenter = circleIntersections.p1;
-							//svg.circle(this.decorationGroup, intersectCenter[0], intersectCenter[1], 1);
+							if (this.filletRadius <= 0) {
+								// we draw the cutouts without any fillets
+								var circleIntersections = TwoD.twoCirclesIntersections(c1, this.outerCircleRadius, c2, this.outerCircleRadius);
+								var intersectCenter = circleIntersections.p1;
+								//svg.circle(this.decorationGroup, intersectCenter[0], intersectCenter[1], 1);
 
-							circleIntersections = TwoD.twoCirclesIntersections(c0, this.innerRimRadius, c1, this.outerCircleRadius);
-							var intersectLeft = circleIntersections.p0;
-							//svg.circle(this.decorationGroup, intersectLeft[0], intersectLeft[1], 1);
+								circleIntersections = TwoD.twoCirclesIntersections(c0, this.innerRimRadius, c1, this.outerCircleRadius);
+								var intersectLeft = circleIntersections.p0;
+								//svg.circle(this.decorationGroup, intersectLeft[0], intersectLeft[1], 1);
 
-							circleIntersections = TwoD.twoCirclesIntersections(c0, this.innerRimRadius, c2, this.outerCircleRadius);
-							var intersectRight = circleIntersections.p1;
-							//svg.circle(this.decorationGroup, intersectRight[0], intersectRight[1], 1);
+								circleIntersections = TwoD.twoCirclesIntersections(c0, this.innerRimRadius, c2, this.outerCircleRadius);
+								var intersectRight = circleIntersections.p1;
+								//svg.circle(this.decorationGroup, intersectRight[0], intersectRight[1], 1);
 
-							var path = svg.createPath();
-							path.move(intersectCenter[0], intersectCenter[1]);
-							
-							path.arc(this.outerCircleRadius, this.outerCircleRadius, 0, 0, 0, intersectLeft[0], intersectLeft[1]);
-							path.arc(this.innerRimRadius, this.innerRimRadius, 0, 0, 1, intersectRight[0], intersectRight[1]);
-							path.arc(this.outerCircleRadius, this.outerCircleRadius, 0, 0, 0, intersectCenter[0], intersectCenter[1]);
+								var path = svg.createPath();
+								path.move(intersectCenter[0], intersectCenter[1]);
+								
+								path.arc(this.outerCircleRadius, this.outerCircleRadius, 0, 0, 0, intersectLeft[0], intersectLeft[1]);
+								path.arc(this.innerRimRadius, this.innerRimRadius, 0, 0, 1, intersectRight[0], intersectRight[1]);
+								path.arc(this.outerCircleRadius, this.outerCircleRadius, 0, 0, 0, intersectCenter[0], intersectCenter[1]);
 
-							path.close();
-							svg.path(this.decorationGroup, path, regularLinesStyle);
+								path.close();
+								svg.path(this.decorationGroup, path, regularLinesStyle);
+							}
+							else {
+								// we draw the cutouts with fillets
+								// outer fillets
+								var circleInfo0 = {
+									center: c0,
+									radius: this.innerRimRadius,
+									filletInside: true
+								};
+								var circleInfo1 = {
+									center: c1,
+									radius: this.outerCircleRadius,
+									filletInside: false
+								};
+								var outerFillet1Info = this.calcFilletInfo(circleInfo0, circleInfo1, this.filletRadius);
+								//this.debugDrawFilletInfo(outerFillet1Info, this.filletRadius, this.decorationGroup);
+
+								var circleInfo2 = {
+									center: c2,
+									radius: this.outerCircleRadius,
+									filletInside: false
+								};
+								var outerFillet2Info = this.calcFilletInfo(circleInfo2, circleInfo0, this.filletRadius);
+								//this.debugDrawFilletInfo(outerFillet2Info, this.filletRadius, this.decorationGroup);
+								
+								// inner fillet
+								var innerFilletInfo = this.calcFilletInfo(circleInfo2, circleInfo1, this.filletRadius);
+								//this.debugDrawFilletInfo(innerFilletInfo, this.filletRadius, this.decorationGroup);
+
+								var path = svg.createPath();
+								var endPoint;
+								endPoint = outerFillet1Info.touchPoints[0];
+								path.move(endPoint[0], endPoint[1]);
+								
+								endPoint = outerFillet2Info.touchPoints[1];
+								path.arc(this.innerRimRadius, this.innerRimRadius, 0, 0, 1, endPoint[0], endPoint[1]);
+								
+								endPoint = outerFillet2Info.touchPoints[0];
+								path.arc(this.filletRadius, this.filletRadius, 0, 0, 1, endPoint[0], endPoint[1]);
+								
+								endPoint = innerFilletInfo.touchPoints[0];
+								path.arc(this.outerCircleRadius, this.outerCircleRadius, 0, 0, 0, endPoint[0], endPoint[1]);
+								
+								endPoint = innerFilletInfo.touchPoints[1];
+								path.arc(this.filletRadius, this.filletRadius, 0, 0, 1, endPoint[0], endPoint[1]);
+
+								endPoint = outerFillet1Info.touchPoints[1];
+								path.arc(this.outerCircleRadius, this.outerCircleRadius, 0, 0, 0, endPoint[0], endPoint[1]);
+
+								endPoint = outerFillet1Info.touchPoints[0];
+								path.arc(this.filletRadius, this.filletRadius, 0, 0, 1, endPoint[0], endPoint[1]);
+
+								path.close();
+								svg.path(this.decorationGroup, path, regularLinesStyle);
+							}
 						}
 					}
+					// circle info consists of {center: [x,y], radius: r, filletInside: true/false} 
+					CircularHolesDecoration.prototype.calcFilletInfo = function(circleInfo0, circleInfo1, filletRadius) {
+						// we get the center of the fillet circle by calculating the intersection of the two circles enlarged or decreased by the fillet radius
+						var r0 = circleInfo0.filletInside ? circleInfo0.radius - filletRadius : circleInfo0.radius + filletRadius;
+						var r1 = circleInfo1.filletInside ? circleInfo1.radius - filletRadius : circleInfo1.radius + filletRadius;
+						var circleIntersections = TwoD.twoCirclesIntersections(circleInfo0.center, r0, circleInfo1.center, r1);
+						
+						var filletCenter = circleIntersections.p0;
+						
+						// calculating touch point 0 (where the first circle touches the fillet circle)
+						var c0ToFilletCenter = TwoD.substractVectors(filletCenter, circleInfo0.center);
+						var c0ToTouchPoint0 = TwoD.scaleVector(circleInfo0.radius / r0, c0ToFilletCenter);
+						var touchPoint0 = TwoD.addVectors(circleInfo0.center, c0ToTouchPoint0);
+						
+						// calculating touch point 1 (where the second circle touches the fillet circle)
+						var c1ToFilletCenter = TwoD.substractVectors(filletCenter, circleInfo1.center);
+						var c1ToTouchPoint1 = TwoD.scaleVector(circleInfo1.radius / r1, c1ToFilletCenter);
+						var touchPoint1 = TwoD.addVectors(circleInfo1.center, c1ToTouchPoint1);
+
+						return {
+							center: filletCenter,
+							touchPoints: [ touchPoint0, touchPoint1 ]
+						};
+					}
+					CircularHolesDecoration.prototype.debugDrawFilletInfo = function(filletInfo, filletRadius, svgGroup) {
+						svg.circle(svgGroup, filletInfo.center[0], filletInfo.center[1], filletRadius);
+						svg.circle(svgGroup, filletInfo.touchPoints[0][0], filletInfo.touchPoints[0][1], 1);
+						svg.circle(svgGroup, filletInfo.touchPoints[1][0], filletInfo.touchPoints[1][1], 1);
+					}
+
 					return CircularHolesDecoration;
 				})(WheelDecoration);
 				
@@ -453,6 +540,7 @@
 				var wheelDecoration = new CircularHolesDecoration(wheel);
 				
 				gearSet.createSVG();
+				wheel.setAngle(0);
 
 				var border = 5;
 				var width = wheel.outerRadius + pinion.outerRadius + gearSet.wheelPinionDistance + 2 * border;
@@ -485,7 +573,7 @@
 				anchor.href = (window.URL || webkitURL).createObjectURL(blob);
 				//a.click();
 				
-				animate();
+				//animate();
 				
 				function animate() {
 					var angle = 0;
