@@ -22,18 +22,42 @@ OpenJsCad.log = function(txt) {
 
 // A viewer is a WebGL canvas that lets the user view a mesh. The user can
 // tumble it around by dragging the mouse.
-OpenJsCad.Viewer = function(containerelement, width, height, initialdepth) {
+OpenJsCad.Viewer = function(containerelement, width, height, initialdepth, options) {
   var gl = GL.create();
   this.gl = gl;
-  this.angleX = -60;
+  //this.angleX = -60;
+  this.angleX = 0;
   this.angleY = 0;
-  this.angleZ = -45;
+  //this.angleZ = -45;
+  this.angleZ = -90;
   this.viewpointX = 0;
   this.viewpointY = 0;
   this.viewpointZ = initialdepth;
-
+  
+  this.options = options || {};
   // Draw axes flag:
-  this.drawAxes = true;
+  if (options.drawAxes !== undefined) {
+    this.drawAxes = options.drawAxes;
+  }
+  else {
+    this.drawAxes = true;
+  }
+  
+  // enable / disable rotate Z, X
+  if (options.rotateZX !== undefined) {
+    this.rotateZX = options.rotateZX;
+  }
+  else {
+    this.rotateZX = true;
+  }
+  // enable / disable rotate X, Y
+  if (options.rotateXY !== undefined) {
+    this.rotateXY = options.rotateXY;
+  }
+  else {
+    this.rotateXY = true;
+  }
+
   // Draw triangle lines:
   this.drawLines = false;
   // Set to true so lines don't use the depth buffer
@@ -162,14 +186,14 @@ OpenJsCad.Viewer.prototype = {
   onMouseMove: function(e) {
     if (e.dragging) {
       e.preventDefault();
-      if(e.altKey) { //ROTATE Z, X
+      if(e.altKey && this.rotateZX) { //ROTATE Z, X
         this.angleZ += e.deltaX * 2;
         this.angleX += e.deltaY * 2;
-      } else if(e.shiftKey) {//PAN
+      } else if(e.shiftKey || !this.rotateXY) {//PAN
         var factor = 5e-3;
         this.viewpointX += factor * e.deltaX * this.viewpointZ;
         this.viewpointY -= factor * e.deltaY * this.viewpointZ;
-      } else {//ROTATE X, Y
+      } else if (this.rotateXY){//ROTATE X, Y
         this.angleY += e.deltaX * 2;
         this.angleX += e.deltaY * 2;
         //this.angleX = Math.max(-180, Math.min(180, this.angleX));
@@ -504,8 +528,8 @@ OpenJsCad.parseJsCadScriptSync = function(script, mainParameters, debugging) {
 // callback: should be function(error, csg)
 OpenJsCad.parseJsCadScriptASync = function(script, mainParameters, options, callback) {
   var baselibraries = [
-    "csg.js",
-    "openjscad.js"
+    "OpenJsCad/csg.js",
+    "OpenJsCad/openjscad.js"
   ];
 
   var baseurl = document.location.href.replace(/\?.*$/, '');
@@ -651,9 +675,10 @@ OpenJsCad.getParamDefinitions = function(script) {
   return params;
 };
 
-OpenJsCad.Processor = function(containerdiv, onchange) {
+OpenJsCad.Processor = function(containerdiv, viewerOptions, onchange) {
   this.containerdiv = containerdiv;
   this.onchange = onchange;
+  this.viewerOptions = viewerOptions;
   this.viewerdiv = null;
   this.viewer = null;
   this.zoomControl = null;
@@ -716,7 +741,7 @@ OpenJsCad.Processor.prototype = {
     this.viewerdiv = viewerdiv;
     try
     {
-      this.viewer = new OpenJsCad.Viewer(this.viewerdiv, this.viewerwidth, this.viewerheight, this.initialViewerDistance);
+      this.viewer = new OpenJsCad.Viewer(this.viewerdiv, this.viewerwidth, this.viewerheight, this.initialViewerDistance, that.viewerOptions);
     } catch(e) {
       //      this.viewer = null;
       this.viewerdiv.innerHTML = "<b><br><br>Error: " + e.toString() + "</b><br><br>OpenJsCad requires a WebGL enabled browser. Try a recent version of Chrome of Firefox.";
