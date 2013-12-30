@@ -113,6 +113,9 @@
 						}
 						path.close();
 						svg.path(this.gearGroup, path, regularLinesStyle);
+						if (this.centerHoleDiameter > 0) {
+							svg.circle(this.gearGroup, 0, 0, this.centerHoleDiameter / 2, regularLinesStyle);
+						}
 					}
 					Gear.prototype._insertSvgHelperLines = function(gearGroup)
 					{
@@ -456,8 +459,19 @@
 						this.pinion = pinion;
 
 						var options = options || {};
+						
+						// module mm. The diameter of the pitch circle in millimeters divided by the number of teeth
+						if (options.module !== undefined) {
+							this.module = options.module;
+						}
+						else if (options.wheelPinionDistance !== undefined) {
+							// we calculate module from the distance
+							this.module = 2 * options.wheelPinionDistance / (wheel.toothCount + pinion.toothCount);
+						}
+						else {
+							this.module = 4; 
+						}
 
-						this.module = options.module || 4; // module mm. The width of a tooth-space pair is always π modules and the pitch diameter of the gear is equal to the module times the number of teeth.
 						if (options.customSlop === undefined) {
 							this.customSlopEnabled = false;
 						}
@@ -465,7 +479,12 @@
 							this.customSlopEnabled = true;
 							this.customSlop = options.customSlop; // The slop in mm between the apex of one gear and the trough of the other. Only used if custom slop is enabled. Otherwise the default as described by Hugh Sparks is used.
 						}
-						this.showHelperLines = options.showHelperLines || true;
+						if (options.showHelperLines === undefined) {
+							this.showHelperLines = false;
+						}
+						else {
+							this.showHelperLines = options.showHelperLines;
+						}
 						this.update();
 						//this.wheel.setAngle(0);
 					}
@@ -520,8 +539,6 @@
 					centerHoleDiameter: 4
 				});
 				
-
-
 				var pinion = new Pinion({
 					toothCount: 6,
 					centerHoleDiameter: 4
@@ -532,8 +549,10 @@
 					pinion,
 					{
 						module: 4,
+						//wheelPinionDistance: 94.8,
 						showHelperLines: true,
-						//customSlop: 0
+						//customSlop: 1,
+						//showHelperLines: false
 					}
 				);
 
@@ -543,8 +562,9 @@
 				wheel.setAngle(0);
 
 				var border = 5;
-				var width = wheel.outerRadius + pinion.outerRadius + gearSet.wheelPinionDistance + 2 * border;
 				var height = 2 * Math.max(wheel.outerRadius, pinion.outerRadius) + 2 * border;
+				var width = wheel.outerRadius + pinion.outerRadius + gearSet.wheelPinionDistance + 2 * border;
+				//var width = height;
 				
 				var sizeConfig = {
 					width: "{0}mm".format(width),
