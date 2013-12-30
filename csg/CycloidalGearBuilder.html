@@ -1,0 +1,432 @@
+﻿<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" >
+<head>
+	<title>Cycloidal Gear Builder</title>
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+	<meta name="description" content="Cycloidal gear builder with DXF output. Licensed under the MIT license (http://opensource.org/licenses/mit-license.php). Copyright 2013 Dr. Rainer Hessmer">
+	<meta name="author" content="Dr. Rainer Hessmer">
+
+	<script type="text/javascript" src="OpenJsCad/lightgl.js" ></script>
+	<script type="text/javascript" src="OpenJsCad/csg.js"></script>
+	<script type="text/javascript" src="OpenJsCad/openjscad.js"></script>
+	<style type="text/css">
+
+		body {
+			font: 14px/20px 'Helvetica Neue Light', HelveticaNeue-Light, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+			max-width: 820px;
+			margin: 0 auto;
+			padding: 10px;
+		}
+
+		pre, code, textarea {
+			font: 12px/20px Monaco, monospace;
+			border: 1px solid #CCC;
+			border-radius: 3px;
+			background: #F9F9F9;
+			padding: 0 3px;
+			color: #555;
+		}
+		pre, textarea {
+			padding: 10px;
+			width: 100%;
+		}
+		textarea {
+			height: 200px;
+		}
+		textarea:focus {
+			outline: none;
+		}
+
+		canvas { cursor: move; }
+
+	</style>
+	<link rel="stylesheet" href="OpenJsCad/openjscad.css" type="text/css">
+
+	<script type="text/javascript">
+		var gProcessor=null;
+
+		// Show all exceptions to the user:
+		OpenJsCad.AlertUserOfUncaughtExceptions();
+
+		function onload()
+		{
+		  var viewerOptions = {
+			drawAxes: false,
+			rotateZX: false,
+			rotateXY: false
+		  }
+		  gProcessor = new OpenJsCad.Processor(document.getElementById("viewer"), viewerOptions);
+		  updateSolid();
+		}
+
+		function updateSolid()
+		{
+		  var jscadCode = document.getElementById('scriptContainer').getElementsByTagName("script")[0].innerText;
+		  gProcessor.setJsCad(jscadCode, "CycloidalGear");
+		}
+	</script>
+</head>
+
+<body onload="onload()">
+	<h1>Cycloidal Gear Builder <span style="font-size:10px">(C) 2013 Dr. Rainer Hessmer</span></h1>
+	<p>This open source Cycloidal Gear Builder is an evolution of a <a href="http://www.hessmer.org/blog/2012/01/28/cycloidal-gear-builder/">desktop app</a> that I developed in 2012. The new version runs in modern browsers with WebGL support (if in doubt, use Chrome). The output format has changed from SVG to DXF which is more commonly used in CAD and CAM applications. If SVG output is desired the DXF output can easily be imported into the open source SVG editor <a href="http://www.inkscape.org/">Inkscape</a>.</p>
+    <p>The calculations reflect the British Standard 978, Part 2. They are based on Hugh Sparks’ 
+	<a href="http://www.csparks.com/watchmaking/CycloidalGears/index.jxl">excellent write-up on cycloidal gears</a> and his associated JavaScript based <a href="http://www.csparks.com/watchmaking/CycloidalGears/CycloidCalculator.html">calculator</a>.</p>
+    <h2>Instructions</h2>
+    <p>Specify desired values in the parameters box and then click on the 'Update' button. Dependent on the specified resolution the rendering might take some time. Once done, the result can be saved as a DXF file by clicking the 'Generate DXF' button underneath the graphics window.</p>
+    <p>Use the mouse scroll wheel or the slider underneath the window to zoom in and out. Press the left mouse button and move the mouse to pan.</p>
+	<div id="viewer"></div>
+
+	<div id="scriptContainer">
+		<script type="text">
+			// this is the jscad script
+			var g_ErrorLimit = 0.000001;
+			var g_Resolution = 50; // determines the number of segments used when drawing curves
+
+			function main(params)
+			{
+				// Main entry point; here we construct our solid:
+				g_Resolution = params.resolution;
+				var wheel = new Wheel(params.wheelToothCount, params.wheelCenterHoleDiamater);
+				var pinion = new Pinion(params.pinionToothCount, params.pinionCenterHoleDiamater);
+				var gearSet = new GearSet(
+					params.module,
+					params.customSlop,
+					wheel,
+					pinion,
+					params.showOption);
+
+				var graphics = gearSet.createGraphics();
+				return graphics;
+			}
+
+			function getParameterDefinitions() {
+				return [
+					{ name: 'module', caption: 'Module:', type: 'float', initial: 4 },
+					{ name: 'wheelToothCount', caption: 'Wheel Tooth Count:', type: 'int', initial: 30 },
+					{ name: 'wheelCenterHoleDiamater', caption: 'Wheel Center Hole Diameter (0 for no hole):', type: 'float', initial: 6 },
+					{ name: 'pinionToothCount', caption: 'Pinion Tooth Count:', type: 'int', initial: 8 },
+					{ name: 'pinionCenterHoleDiamater', caption: 'Pinion Center Hole Diameter (0 for no hole):', type: 'float', initial: 6 },
+					{ name: 'showOption', caption: 'Show:', type: 'choice', values: [3, 1, 2], initial: 3, captions: ["Wheel and Pinion", "Wheel Only", "Pinion Only"]},
+					{ name: 'customSlop', caption: 'Custom Slop (slop betweeen the apex of one gear and the trough of the other. If negative then the default as described by Hugh Sparks is used):', type: 'float', initial: -1 },
+					{ name: 'resolution', caption: 'Resolution (number of segments per 360 degree of rotation, set to 200 or higher for production quality):', type: 'int', initial: 40 },
+				];
+			}
+
+			// Generic support for 'class' inheritance (see TypeScript playground example 'Simple Inheritance' for details (http://www.typescriptlang.org/Playground/)
+			var __extends = this.__extends || function (d, b) {
+				function __() { this.constructor = d; }
+				__.prototype = b.prototype;
+				d.prototype = new __();
+			};
+			// End generic support for 'class' inheritance
+
+			// Start base class Gear
+			var Gear = (function () {
+				function Gear(toothCount, centerHoleDiameter) {
+					this.toothCount = toothCount;
+					this.centerHoleDiameter = centerHoleDiameter;
+
+					this.center = [0,0]; // center of the gear
+					this.angle = 0;      // angle in degrees of the complete gear
+				}
+				Gear.prototype.createGraphics = function() {
+					// draw the dedendum circle
+					var radius = this.pitchDiameter / 2.0 - this.dedendum;
+					var dedendumCircle = CAG.circle({center: [0, 0], radius: radius, resolution: g_Resolution});
+				
+					var gearGraphics = new CAG();
+					gearGraphics = gearGraphics.union(dedendumCircle);
+					var protoTooth = this.createProtoTooth();
+					//gearGraphics = gearGraphics.union(protoTooth);
+					var angleBetweenTeeth = 360 / this.toothCount;
+					for (var i = 0; i < this.toothCount; i++) {
+						var angle = i * angleBetweenTeeth;
+						var rotatedTooth = protoTooth.rotateZ(angle)
+						gearGraphics = gearGraphics.union(rotatedTooth);
+					}
+
+					if (this.centerHoleDiameter > 0) {
+						var centerhole = CAG.circle({center: [-0, -0], radius: this.centerHoleDiameter / 2, resolution: g_Resolution});
+						gearGraphics = gearGraphics.subtract(centerhole);
+					}
+					
+					// apply gear rotation
+					gearGraphics = gearGraphics.rotateZ(this.angle)
+					// rotate so that 0 degrees points to the right
+					gearGraphics = gearGraphics.rotateZ(90)
+					// move to correct center
+					gearGraphics = gearGraphics.translate(this.center);
+					return gearGraphics;
+				}
+				Gear.prototype.createProtoTooth = function() {
+					// creates a tooth pointing at 0 degrees
+					var centerRayAngle = 0;
+					var radius = this.pitchDiameter / 2.0 + this.addendum;
+					
+					// the gear center is assumed to be [0.0]
+					var center = [0,0];
+
+					var apex = [
+						center[0] + Math.cos(centerRayAngle) * radius,
+						center[1] + Math.sin(centerRayAngle) * radius
+					];
+
+					var leftFlankAngle = centerRayAngle - this.halfToothAngle;
+					var rightFlankAngle = centerRayAngle + this.halfToothAngle;
+
+					var pitchRadius = this.pitchDiameter / 2.0;
+					var pitchCircleIntersectLeft = [
+						center[0] + Math.cos(leftFlankAngle) * pitchRadius,
+						center[1] + Math.sin(leftFlankAngle) * pitchRadius
+					];
+					var pitchCircleIntersectRight = [
+						center[0] + Math.cos(rightFlankAngle) * pitchRadius,
+						center[1] + Math.sin(rightFlankAngle) * pitchRadius
+					];
+					
+					var toothPath = new CSG.Path2D([center, pitchCircleIntersectLeft], /* closed = */ false);
+					toothPath = toothPath.appendArc(
+						apex,
+						{
+							radius: this.addendumRadius,
+							resolution: g_Resolution,
+							clockwise: false,
+							large: false
+						}
+					);
+					toothPath = toothPath.appendArc(
+						pitchCircleIntersectRight,
+						{
+							radius: this.addendumRadius,
+							resolution: g_Resolution,
+							clockwise: false,
+							large: false
+						}
+					);
+					toothPath = toothPath.close();
+					return toothPath.innerToCAG();
+				}
+				return Gear;
+			})();
+
+			// Wheel class
+			var Wheel = (function (_super) {
+				__extends(Wheel, _super);
+				function Wheel(toothCount, centerHoleDiameter) {
+					_super.call(this, toothCount, centerHoleDiameter);
+				}
+				Wheel.prototype.update1 = function() {
+					// update 1 calculates values that never depend on the matching gear
+					this.pitchDiameter = this.gearSet.module * this.toothCount;
+					this.addendum = this.gearSet.module * this.gearSet.practicalAddendumFactor;
+					this.addendumRadius = this.gearSet.module * 1.40 * this.gearSet.addendumFactor;
+					this.halfToothAngle = Math.PI / this.toothCount / 2;
+					
+					//console.log("addendum: " + this.addendum);
+					//console.log("addendumRadius: " + this.addendumRadius);
+				}
+				Wheel.prototype.update2 = function() {
+					// stage 2 of the update; note that the dedendum can depend on the addendum of the other gear
+					if (this.gearSet.customSlop >= 0) {
+						this.dedendum = this.gearSet.pinion.addendum + this.gearSet.customSlop;
+					}
+					else {
+						this.dedendum = this.gearSet.module * Math.PI / 2;
+					}
+					//console.log("dedendum: " + this.dedendum);
+
+					this.innerRadius = this.pitchDiameter / 2 - this.dedendum;
+					this.outerRadius = this.pitchDiameter / 2 + this.addendum;
+				}
+				return Wheel;
+			})(Gear);
+
+			// Pinion class
+			var Pinion = (function (_super) {
+				__extends(Pinion, _super);
+				function Pinion(toothCount, centerHoleDiameter) {
+					_super.call(this, toothCount, centerHoleDiameter);
+				}
+				Pinion.prototype.update1 = function() {
+					// update 1 calculates values that never depend on the matching gear
+					this.pitchDiameter = this.gearSet.module * this.toothCount;
+					this._initializeToothAngle();
+					this._initializeAddendum();
+				}
+				Pinion.prototype.update2 = function() {
+					// stage 2 of the update; note that the dedendum can depend on the addendum of the other gear
+					if (this.gearSet.customSlop >= 0) {
+						this.dedendum = this.gearSet.wheel.addendum + this.gearSet.customSlop;
+					}
+					else {
+						this.dedendum = this.gearSet.module * (this.gearSet.practicalAddendumFactor + 0.4);
+					}
+					
+					this.innerRadius = this.pitchDiameter / 2 - this.dedendum;
+					this.outerRadius = this.pitchDiameter / 2 + this.addendum;
+					
+					this.center = [0, this.gearSet.wheelPinionDistance];
+					// we need an angle offset of half a tooth for the two gears to mesh
+					var offset = 180 + 180 / this.toothCount;
+					this.angle = offset;
+				}
+				Pinion.prototype._initializeToothAngle = function() {
+					// From http://www.csparks.com/watchmaking/CycloidalGears/index.jxl:
+					// The nominal width of a tooth or a space when they are equally spaced is just pi/2, or about 1.57.
+					// For pinions, we will reduce the width of the tooth a bit. For pinions with 6-10 leaves, the tooth
+					// width at the pitch circle is 1.05. For pinions with 11 or more teeth the tooth width is 1.25. 
+					var factor = 0;
+					if (this.toothCount <= 10) {
+						factor = 1.05;
+					}
+					else {
+						factor = 1.25;
+					}
+
+					//factor = Math.PI / 2;
+					this.halfToothAngle = factor * this.gearSet.module / this.pitchDiameter;
+				}
+				Pinion.prototype._initializeAddendum = function() {
+					// For details see the Profile - Leaves tables in http://www.csparks.com/watchmaking/CycloidalGears/index.jxl
+					if (this.toothCount <= 7) {
+						// high ogival
+						this.addendum = 0.855 * this.gearSet.module;
+						this.addendumRadius = 1.050 * this.gearSet.module;
+					}
+					else if (this.toothCount == 8 || this.toothCount == 9) {
+						// medium ogival
+						this.addendum = 0.670 * this.gearSet.module;
+						this.addendumRadius = 0.7 * this.gearSet.module;
+					}
+					else if (this.toothCount == 10) {
+						// round top for small tooth
+						this.addendum = 0.525 * this.gearSet.module;
+						this.addendumRadius = 0.525 * this.gearSet.module;
+					}
+					else {
+						// 11+ teeth, round top for wider tooth
+						this.addendum = 0.625 * this.gearSet.module;
+						this.addendumRadius = 0.625 * this.gearSet.module;
+					}
+				}
+				return Pinion;
+			})(Gear);
+
+			// GearSet class
+			var GearSet = (function () {
+				function GearSet(module, customSlop, wheel, pinion, showOption) {
+					wheel.gearSet = this;
+					wheel.connectedGear = pinion;
+					this.wheel = wheel;
+					
+					pinion.gearSet = this;
+					pinion.connectedGear = wheel;
+					this.pinion = pinion;
+
+					// module mm. The diameter of the pitch circle in millimeters divided by the number of teeth
+					this.module = module;
+					//else if (options.wheelPinionDistance !== undefined) {
+					//	// we calculate module from the distance
+					//	this.module = 2 * options.wheelPinionDistance / (wheel.toothCount + pinion.toothCount);
+					//}
+					//else {
+					//	this.module = 4; 
+					//}
+
+					this.customSlop = customSlop; // The slop in mm between the apex of one gear and the trough of the other. Only used if custom slop is >= 0. Otherwise the default as described by Hugh Sparks is used.
+					//if (options.showHelperLines === undefined) {
+					//	this.showHelperLines = false;
+					//}
+					//else {
+					//	this.showHelperLines = options.showHelperLines;
+					//}
+					this.showOption = showOption;
+					this.update();
+					//this.wheel.setAngle(0);
+				}
+				GearSet.prototype.update = function() {
+					if (this.pinion.toothCount <= 0 || this.wheel.toothCount <= 0 || this.module <= 0) {
+						// TODO: set all outputs to zero
+					}
+					else {
+						this.addendumFactor = this._calcAddendumFactor(this.wheel.toothCount, this.pinion.toothCount);
+						this.practicalAddendumFactor = 0.95 * this.addendumFactor;
+						this.gearRatio = this.wheel.toothCount / this.pinion.toothCount;
+						
+						console.log("addendumFactor: " + this.addendumFactor);
+						console.log("practicalAddendumFactor: " + this.practicalAddendumFactor);
+
+						this.circularPitch = this.module * Math.PI;
+					}
+
+					this.wheel.update1();
+					this.pinion.update1();
+					this.wheelPinionDistance = (this.wheel.pitchDiameter + this.pinion.pitchDiameter) / 2.0;
+					this.wheel.update2();
+					this.pinion.update2();
+				}
+				GearSet.prototype._calcAddendumFactor = function() {
+					var beta = 0.0;
+					var theta = 1.0 ;
+					var thetaNew = 0.0 ;
+					var R = this.wheel.toothCount / this.pinion.toothCount; // gear ratio
+					while (Math.abs(thetaNew - theta) > g_ErrorLimit)
+					{
+						theta = thetaNew;
+						beta = Math.atan2(Math.sin(theta), (1.0 + 2 * R - Math.cos(theta))) ;
+						thetaNew = Math.PI/this.pinion.toothCount + 2 * R * beta ;	
+					}
+
+					theta = thetaNew;
+
+					k = 1.0 + 2 * R;
+
+					// addendum factor af
+					addendumFactor = this.pinion.toothCount / 4.0 * (1.0 - k + Math.sqrt( 1.0 + k * k - 2.0 * k * Math.cos(theta)) );
+					return addendumFactor;
+				}
+				GearSet.prototype.createGraphics = function() {
+					var graphics = new CAG();
+					if ((this.showOption & 1) > 0) {
+						// show wheel
+						var wheelGraphics = this.wheel.createGraphics();
+						graphics = graphics.union(wheelGraphics);
+					}
+					if ((this.showOption & 2) > 0) {
+						// show pinion
+						var pinionGraphics = this.pinion.createGraphics();
+						graphics = graphics.union(pinionGraphics);
+					}
+					return graphics;
+					
+					// return [
+						// {
+							// name: "wheel",              // optional, will be used as a prefix for the downloaded stl file
+							// caption: "Wheel",   // will be shown in the dropdown box
+							// data: this.wheel.createGraphics(),
+						// },
+						// {
+							// name: "pinion",            // optional, will be used as a prefix for the downloaded dxf file
+							// caption: "Pinion",
+							// data: this.pinion.createGraphics(),
+						// },
+					// ];
+				}
+
+				return GearSet;
+			})();
+
+		</script>
+	</div>
+
+    <h2>License and Credits</h2>
+
+    <ul>
+        <li>The application itself, as well as the application specific source code is copyright (c) 2013 by Dr. Rainer Hessmer and is covered by the permissive MIT license.</li>
+        <li>The calculations are based on Hugh Sparks’	<a href="http://www.csparks.com/watchmaking/CycloidalGears/index.jxl">excellent write-up on cycloidal gears</a> and his associated JavaScript based <a href="http://www.csparks.com/watchmaking/CycloidalGears/CycloidCalculator.html">calculator</a> (both do not come with a specific license).</li>
+        <li>This web page heavily leverages the <a href="http://joostn.github.io/OpenJsCad/">OpenJsCad</a> framework developed by <a href="https://github.com/joostn">Joost Nieuwenhuijse</a>. <a href="http://joostn.github.io/OpenJsCad/">OpenJsCad</a> in turn leverages the <a href="https://github.com/evanw/csg.js">initial CSG.js</a> copyright (c) 2011 <a href="https://github.com/evanw">Evan Wallace</a> and <a href="https://github.com/evanw/lightgl.js">lightgl.js</a> by <a href="https://github.com/evanw"> Evan Wallace</a> and <a href="https://github.com/toaarnio"> Tomi Aarnio</a> for WebGL rendering. Contributions by <a href="https://github.com/alx"> Alexandre Girard</a>, <a href="https://github.com/tlrobinson">Tom Robinson</a>, <a href="https://github.com/jboecker">jboecker</a>, <a href="https://github.com/risacher">risacher</a> and <a href="https://github.com/tedbeer">tedbeer</a>. All code released under the MIT license.</li>
+    </ul>
+
+    </body>
+</html>
