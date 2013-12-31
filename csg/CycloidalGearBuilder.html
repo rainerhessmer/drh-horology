@@ -61,7 +61,7 @@
 
 		function updateSolid()
 		{
-		  var jscadCode = document.getElementById('scriptContainer').getElementsByTagName("script")[0].innerText;
+		  var jscadCode = document.getElementById('scriptContainer').getElementsByTagName("script")[0].text;
 		  gProcessor.setJsCad(jscadCode, "CycloidalGear");
 		}
 	</script>
@@ -81,12 +81,13 @@
 		<script type="text">
 			// this is the jscad script
 			var g_ErrorLimit = 0.000001;
-			var g_Resolution = 50; // determines the number of segments used when drawing curves
+			var g_Resolution; // determines the number of segments used when drawing curves
 
 			function main(params)
 			{
 				// Main entry point; here we construct our solid:
-				g_Resolution = params.resolution;
+				initializeQualitySettings(params.qualityOption);
+				
 				var wheel = new Wheel(params.wheelToothCount, params.wheelCenterHoleDiamater);
 				var pinion = new Pinion(params.pinionToothCount, params.pinionCenterHoleDiamater);
 				var gearSet = new GearSet(
@@ -109,8 +110,23 @@
 					{ name: 'pinionCenterHoleDiamater', caption: 'Pinion Center Hole Diameter (0 for no hole):', type: 'float', initial: 6 },
 					{ name: 'showOption', caption: 'Show:', type: 'choice', values: [3, 1, 2], initial: 3, captions: ["Wheel and Pinion", "Wheel Only", "Pinion Only"]},
 					{ name: 'customSlop', caption: 'Custom Slop (slop betweeen the apex of one gear and the trough of the other. If negative then the default as described by Hugh Sparks is used):', type: 'float', initial: -1 },
-					{ name: 'resolution', caption: 'Resolution (number of segments per 360 degree of rotation, set to 200 or higher for production quality):', type: 'int', initial: 40 },
+					//{ name: 'resolution', caption: 'Resolution (number of segments per 360 degree of rotation, set to 200 or higher for production quality):', type: 'int', initial: 40 },
+					{ name: 'qualityOption', caption: 'Quality level (better means longer waits):', type: 'choice', values: [0, 1, 2], initial: 0, captions: ["Draft", "Normal", "High"]},
 				];
+			}
+			
+			function initializeQualitySettings(qualityOption) {
+				// default values (draft quality)
+				g_Resolution = 30;  // Number of segments used per 360 degrees when drawing curves
+				
+				if (qualityOption == 1) {
+					// normal quality
+					g_Resolution = 90;
+				}
+				else if (qualityOption == 2) {
+					// high quality
+					g_Resolution = 180;
+				}
 			}
 
 			// Generic support for 'class' inheritance (see TypeScript playground example 'Simple Inheritance' for details (http://www.typescriptlang.org/Playground/)
@@ -223,8 +239,8 @@
 					this.addendumRadius = this.gearSet.module * 1.40 * this.gearSet.addendumFactor;
 					this.halfToothAngle = Math.PI / this.toothCount / 2;
 					
-					//console.log("addendum: " + this.addendum);
-					//console.log("addendumRadius: " + this.addendumRadius);
+					//OpenJsCad.log("addendum: " + this.addendum);
+					//OpenJsCad.log("addendumRadius: " + this.addendumRadius);
 				}
 				Wheel.prototype.update2 = function() {
 					// stage 2 of the update; note that the dedendum can depend on the addendum of the other gear
@@ -234,7 +250,7 @@
 					else {
 						this.dedendum = this.gearSet.module * Math.PI / 2;
 					}
-					//console.log("dedendum: " + this.dedendum);
+					//OpenJsCad.log("dedendum: " + this.dedendum);
 
 					this.innerRadius = this.pitchDiameter / 2 - this.dedendum;
 					this.outerRadius = this.pitchDiameter / 2 + this.addendum;
@@ -354,8 +370,8 @@
 						this.practicalAddendumFactor = 0.95 * this.addendumFactor;
 						this.gearRatio = this.wheel.toothCount / this.pinion.toothCount;
 						
-						console.log("addendumFactor: " + this.addendumFactor);
-						console.log("practicalAddendumFactor: " + this.practicalAddendumFactor);
+						OpenJsCad.log("addendumFactor: " + this.addendumFactor);
+						OpenJsCad.log("practicalAddendumFactor: " + this.practicalAddendumFactor);
 
 						this.circularPitch = this.module * Math.PI;
 					}
