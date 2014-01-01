@@ -61,7 +61,7 @@
 
 		function updateSolid()
 		{
-		  var jscadCode = document.getElementById('scriptContainer').getElementsByTagName("script")[0].innerText;
+		  var jscadCode = document.getElementById('scriptContainer').getElementsByTagName("script")[0].text;
 		  gProcessor.setJsCad(jscadCode, "CycloidalGear");
 		}
 	</script>
@@ -88,7 +88,7 @@
 				var gear1 = new Gear({
 					circularPitch: params.circularPitch,
 					pressureAngle: params.pressureAngle,
-					clearancePercent: params.clearancePercent,
+					clearance: params.clearance,
 					backlash: params.backlash,
 					toothCount: params.wheel1ToothCount,
 					centerHoleDiameter: params.wheel1CenterHoleDiamater,
@@ -98,7 +98,7 @@
 				var gear2 = new Gear({
 					circularPitch: params.circularPitch,
 					pressureAngle: params.pressureAngle,
-					clearancePercent: params.clearancePercent,
+					clearance: params.clearance,
 					backlash: params.backlash,
 					toothCount: params.wheel2ToothCount,
 					centerHoleDiameter: params.wheel2CenterHoleDiamater,
@@ -137,7 +137,7 @@
 				return [
 					{ name: 'circularPitch', caption: 'Circular pitch (distance from one face of a tooth to the corresponding face of an adjacent tooth on the same gear, measured along the pitch circle):', type: 'float', initial: 8 },
 					{ name: 'pressureAngle', caption: 'Pressure Angle (common values are 14.5, 20 and 25 degrees):', type: 'float', initial: 20 },
-					{ name: 'clearancePercent', caption: 'Clearance (minimal distance between the apex of a tooth and the trough of the other gear; percent of addendum height):', type: 'float', initial: 0.05 },
+					{ name: 'clearance', caption: 'Clearance (minimal distance between the apex of a tooth and the trough of the other gear; in length units):', type: 'float', initial: 0.05 },
 					{ name: 'backlash', caption: 'Backlash (minimal distance between meshing gears; in length units):', type: 'float', initial: 0.05 },
 					{ name: 'wheel1ToothCount', caption: 'Wheel 1 Tooth Count:', type: 'int', initial: 30 },
 					{ name: 'wheel1CenterHoleDiamater', caption: 'Wheel 1 Center Hole Diameter (0 for no hole):', type: 'float', initial: 4 },
@@ -169,7 +169,7 @@
 					// common. Increasing the pressure angle increases the width of the base of the gear tooth, leading to greater strength and load carrying capacity. Decreasing
 					// the pressure angle provides lower backlash, smoother operation and less sensitivity to manufacturing errors. (reference: http://en.wikipedia.org/wiki/Involute_gear)
 
-					this.clearancePercent = options.clearancePercent || 0;
+					this.clearance = options.clearance || 0;
 					this.centerHoleDiameter = options.centerHoleDiameter || 0;
 
 					// Given either circular pitch or diametral pitch we calculate the other value
@@ -205,8 +205,8 @@
 					this.outerRadius = this.pitchRadius + this.addendum;
 					this.angleToothToTooth = 360 / this.toothCount;
 					this.qualitySettings = options.qualitySettings;
-					console.log("qualitySettings.resolution: " + this.qualitySettings.resolution);
-					console.log("qualitySettings.stepsPerToothAngle: " + this.qualitySettings.stepsPerToothAngle);
+					//OpenJsCad.log("qualitySettings.resolution: " + this.qualitySettings.resolution);
+					//OpenJsCad.log("qualitySettings.stepsPerToothAngle: " + this.qualitySettings.stepsPerToothAngle);
 				}
 				Gear.prototype.createShape = function() {
 					// create outer circle sector covering half a tooth
@@ -240,7 +240,7 @@
 					}
 					
 					// apply gear rotation
-					//console.log(this.angle);
+					//OpenJsCad.log(this.angle);
 					gearShape = gearShape.rotateZ(this.angle)
 					// move to correct center
 					gearShape = gearShape.translate(this.center);
@@ -276,8 +276,8 @@
 				Gear.prototype.createHalfToothCutout = function(asPath) {
 					var angleToothToTooth = 360 / this.toothCount;
 					var angleStepSize = this.angleToothToTooth / this.qualitySettings.stepsPerToothAngle;
-					console.log("angleToothToTooth: " + this.angleToothToTooth);
-					console.log("angleStepSize: " + angleStepSize);
+					//OpenJsCad.log("angleToothToTooth: " + this.angleToothToTooth);
+					//OpenJsCad.log("angleStepSize: " + angleStepSize);
 					var toothCutout = new CAG();
 					
 					var toothCutter = this.createToothCutter(asPath);
@@ -303,26 +303,89 @@
 							break;
 						}
 
+						// we move in both directions
 						var movedToothCutterShape = toothCutterShape.translate(xTranslation);
 						var movedToothCutterShape = movedToothCutterShape.rotateZ(angle);
 						toothCutout = toothCutout.union(movedToothCutterShape);
+	
+						if (xTranslation[0] > 0) {
+							//OpenJsCad.log("xTranslation: " + xTranslation);
+							movedToothCutterShape = toothCutterShape.translate([-xTranslation[0], xTranslation[1]]);
+							movedToothCutterShape = movedToothCutterShape.rotateZ(-angle);
+							toothCutout = toothCutout.union(movedToothCutterShape);
+						}
 						
 						stepCounter++;
 					}
 					
+					toothCutout = this.smoothen(toothCutout);
+					//var outlinePaths = toothCutout.getOutlinePaths();
+
+					//OpenJsCad.log(this.pointsToString(outlinePaths[0].points));
+					//OpenJsCad.log(toothCutout.isSelfIntersecting());
+					
+					
 					return toothCutout.rotateZ(-this.angleToothToTooth / 2);
+				}
+				Gear.prototype.smoothen = function(shape) {
+					// the undercuts created by the cutout procedure leave corners. In this routine we fill out the valleys formed by one concave corner between two convex corners 
+					var outlinePaths = shape.getOutlinePaths();
+					var corners = outlinePaths[0].points;
+					
+					var isConvex = [];
+					var previousCorner = corners[corners.length - 1];
+					var currentCorner = corners[0];
+					for(var i = 0; i < corners.length; i++) {
+						var nextCorner = corners[(i + 1) % corners.length];
+						
+						var v1 = previousCorner.minus(currentCorner);
+						var v2 = nextCorner.minus(currentCorner);
+						OpenJsCad.log("v1 = [" + v1.x + ", " + v1.y + "]");
+						OpenJsCad.log("v2 = [" + v2.x + ", " + v2.y + "]");
+						
+						var crossProduct = v1.cross(v2);
+						isConvex.push(crossProduct < 0);
+						
+						//OpenJsCad.log(i + ": " + isConvex + " --- " + crossProduct);
+						previousCorner = currentCorner;
+						currentCorner = nextCorner;
+					}
+					// we want to remove any concave corners that are located between two convex corners
+					var cleanedUpPoints = [];
+					var previousIndex = corners.length - 1;
+					var currentIndex = 0;
+					for(var i = 0; i < corners.length; i++) {
+						var corner = corners[currentIndex];
+						var nextIndex = (i + 1) % corners.length;
+						if (isConvex[currentIndex]) {
+							// convex - we always keep it
+							cleanedUpPoints.push([corner.x, corner.y]);
+						}
+						else {
+							// the vertex is concave
+							if (!(isConvex[previousIndex] && isConvex[nextIndex])) {
+								// it is not surrounded by two convex corners so we keep it
+								cleanedUpPoints.push([corner.x, corner.y]);
+							}
+						}
+						previousIndex = currentIndex;
+						currentIndex = nextIndex;
+					}				
+					
+					var cleanedUpShape = CAG.fromPoints(cleanedUpPoints);
+					return cleanedUpShape;
 				}
 				Gear.prototype.createToothCutter = function(asPath) {
 					// we create a trapezoidal cutter as described at http://lcamtuf.coredump.cx/gcnc/ch6/ under the section 'Putting it all together'
 					var toothWidth = this.circularPitch / 2;
-					console.log("toothWidth: " + toothWidth);
-					console.log("addendum: " + this.addendum);
-					console.log("clearancePercent: " + this.clearancePercent);
+					//OpenJsCad.log("toothWidth: " + toothWidth);
+					OpenJsCad.log("addendum: " + this.addendum);
+					OpenJsCad.log("clearance: " + this.clearance);
 					
-					var cutterDepth = this.addendum * (1.0 + this.clearancePercent);
-					var cutterOutsideLength = 4 * this.addendum;
-					console.log("cutterDepth: " + cutterDepth);
-					console.log("cutterOutsideLength: " + cutterOutsideLength);
+					var cutterDepth = this.addendum + this.clearance;
+					var cutterOutsideLength = 1 * this.addendum;
+					OpenJsCad.log("cutterDepth: " + cutterDepth);
+					//OpenJsCad.log("cutterOutsideLength: " + cutterOutsideLength);
 					
 					var sinPressureAngle = Math.sin(this.pressureAngle * Math.PI / 180);
 					var cosPressureAngle = Math.cos(this.pressureAngle * Math.PI / 180);
@@ -330,8 +393,8 @@
 					// if a positive backlash is defined then we widen the trapezoid accordingly.
 					// Each side of the tooth needs to widened by a fourth of the backlash (vertical to cutter faces).
 					var dx = this.backlash / 4 / cosPressureAngle;
-					console.log("backlash: " + this.backlash);
-					console.log("dx: " + dx);
+					//OpenJsCad.log("backlash: " + this.backlash);
+					//OpenJsCad.log("dx: " + dx);
 					
 					var lowerRightCorner = [toothWidth / 2 + dx - cutterDepth * sinPressureAngle, this.pitchRadius - cutterDepth];
 					var upperRightCorner = [toothWidth / 2 + dx  + cutterOutsideLength * sinPressureAngle, this.pitchRadius + cutterOutsideLength];
@@ -357,10 +420,12 @@
 						lowerLeftCorner: cutterPath.points[0] 
 					}
 				}
-				Gear.prototype.logPoints = function(points) {
-					for (var i=0; i < points.length; i++) { 
-						console.log("x = " + points[i][0] + "y = " + points[i][1]);
-					}
+				Gear.prototype.pointsToString = function(points) {
+					var result = "[";
+					points.map(function(point) {
+						result += "[" + point.x + "," + point.y + "],";
+					});
+					return result + "]";
 				}
 				return Gear;
 			})();
@@ -394,6 +459,7 @@
 					if ((this.showOption & 2) > 0) {
 						// show gear 2
 						var gear2Shape = this.gear2.createShape();
+						//var gear2Shape = this.gear2.createCutoutDemo();
 						shape = shape.union(gear2Shape);
 					}
 					return shape;
