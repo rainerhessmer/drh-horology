@@ -1,9 +1,9 @@
 ﻿<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" >
 <head>
-	<title>Involute Gear Builder</title>
+	<title>Involute Spur Gear Builder</title>
 	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
-	<meta name="description" content="Involute gear builder with DXF output. Licensed under the MIT license (http://opensource.org/licenses/mit-license.php). Copyright 2013 Dr. Rainer Hessmer">
+	<meta name="description" content="Involute spur gear builder with DXF output. Licensed under the MIT license (http://opensource.org/licenses/mit-license.php). Copyright 2013 Dr. Rainer Hessmer">
 	<meta name="author" content="Dr. Rainer Hessmer">
 
 	<script type="text/javascript" src="OpenJsCad/lightgl.js" ></script>
@@ -68,10 +68,11 @@
 </head>
 
 <body onload="onload()">
-	<h1>Involute Gear Builder <span style="font-size:10px">(C) 2013 Dr. Rainer Hessmer</span></h1>
-	<p>TBD</p>
+	<h1>Involute Spur Gear Builder <span style="font-size:10px">(C) 2013 Dr. Rainer Hessmer</span></h1>
+	<p>An open source, browser based utility for calculating and drawing involute spur gears. As an improvement over the majority of other freely available scripts and utilities it fully accounts for undercuts. For additional information please head over to my <a href="http://www.hessmer.org/blog/2014/01/01/online-involute-spur-gear-builder">associated blog post</a>.</p>
+	<p>The implementation is inspired by the subtractive process that Michal Zalewski's describes in <a href="http://lcamtuf.coredump.cx/gcnc/ch6/">part six</a> of his excellent <a href=" http://lcamtuf.coredump.cx/gcnc/">Guerrilla guide to CNC machining, mold making, and resin casting</a>.</p>
     <h2>Instructions</h2>
-    <p>Specify desired values in the parameters box and then click on the 'Update' button. Dependent on the specified resolution the rendering might take some time. Once done, the result can be saved as a DXF file by clicking the 'Generate DXF' button underneath the graphics window.</p>
+    <p>Specify desired values in the parameters box and then click on the 'Update' button. Dependent on the specified quality level the rendering might take some time. Once done, the result can be saved as a DXF file by clicking the 'Generate DXF' button underneath the graphics window.</p>
     <p>Use the mouse scroll wheel or the slider underneath the window to zoom in and out. Press the left mouse button and move the mouse to pan.</p>
 	<div id="viewer"></div>
 
@@ -141,7 +142,7 @@
 					{ name: 'backlash', caption: 'Backlash (minimal distance between meshing gears; in length units):', type: 'float', initial: 0.05 },
 					{ name: 'wheel1ToothCount', caption: 'Wheel 1 Tooth Count:', type: 'int', initial: 30 },
 					{ name: 'wheel1CenterHoleDiamater', caption: 'Wheel 1 Center Hole Diameter (0 for no hole):', type: 'float', initial: 4 },
-					{ name: 'wheel2ToothCount', caption: 'Wheel 2 Tooth Count:', type: 'int', initial: 10 },
+					{ name: 'wheel2ToothCount', caption: 'Wheel 2 Tooth Count:', type: 'int', initial: 8 },
 					{ name: 'wheel2CenterHoleDiamater', caption: 'Wheel 2 Center Hole Diameter (0 for no hole):', type: 'float', initial: 4 },
 					{ name: 'showOption', caption: 'Show:', type: 'choice', values: [3, 1, 2], initial: 3, captions: ["Wheel 1 and Wheel 2", "Wheel 1 Only", "Wheel 2 Only"]},
 					//{ name: 'resolution', caption: 'Resolution (number of segments per 360 degree of rotation, set to 200 or higher for production quality):', type: 'int', initial: 40 },
@@ -475,6 +476,7 @@
 
     <ul>
         <li>The application itself, as well as the application specific source code is copyright (c) 2013 Dr. Rainer Hessmer and is covered by the permissive MIT license.</li>
+		<li>Many thanks to Michal Zalewski's for his <a href=" http://lcamtuf.coredump.cx/gcnc/">Guerrilla guide to CNC machining, mold making, and resin casting</a>, in particular <a href=" http://lcamtuf.coredump.cx/gcnc/">section 6.2. Creating spur gears</a>(you need to scroll down a bt to get to section 6.2).</p>.</li>
         <li>This web page heavily leverages the <a href="http://joostn.github.io/OpenJsCad/">OpenJsCad</a> framework developed by <a href="https://github.com/joostn">Joost Nieuwenhuijse</a>. <a href="http://joostn.github.io/OpenJsCad/">OpenJsCad</a> in turn leverages the <a href="https://github.com/evanw/csg.js">initial CSG.js</a> copyright (c) 2011 <a href="https://github.com/evanw">Evan Wallace</a> and <a href="https://github.com/evanw/lightgl.js">lightgl.js</a> by <a href="https://github.com/evanw"> Evan Wallace</a> and <a href="https://github.com/toaarnio"> Tomi Aarnio</a> for WebGL rendering. Contributions by <a href="https://github.com/alx"> Alexandre Girard</a>, <a href="https://github.com/tlrobinson">Tom Robinson</a>, <a href="https://github.com/jboecker">jboecker</a>, <a href="https://github.com/risacher">risacher</a> and <a href="https://github.com/tedbeer">tedbeer</a>. All code released under the MIT license.</li>
     </ul>
 
