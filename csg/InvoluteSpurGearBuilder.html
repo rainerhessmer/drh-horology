@@ -113,6 +113,7 @@
 					params.showOption);
 
 				var shape = gearSet.createShape();
+				OpenJsCad.log("returning shape");
 				return shape;
 			}
 			
@@ -211,29 +212,59 @@
 				}
 				Gear.prototype.createShape = function() {
 					// create outer circle sector covering half a tooth
-					var halfToothSectorPath = new CSG.Path2D([[0,0]], /* closed = */ false);
-					var halfToothSectorArc = CSG.Path2D.arc({
+					var toothSectorPath = new CSG.Path2D([[0,0]], /* closed = */ false);
+					var toothSectorArc = CSG.Path2D.arc({
 						center: [0, 0],
 						radius: this.outerRadius,
 						startangle: 90,
-						endangle: 90 - this.angleToothToTooth / 2,
+						endangle: 90 - this.angleToothToTooth,
 						resolution: this.qualitySettings.resolution,
 					});
-					halfToothSectorPath = halfToothSectorPath.concat(halfToothSectorArc);
-					halfToothSectorPath = halfToothSectorPath.close();
-					var halfToothSector = halfToothSectorPath.innerToCAG();
+					toothSectorPath = toothSectorPath.concat(toothSectorArc);
+					toothSectorPath = toothSectorPath.close();
+					var toothSector = toothSectorPath.innerToCAG();
 
-					var halfToothCutout = this.createHalfToothCutout(false);
-					var halfTooth = halfToothSector.subtract(halfToothCutout);
-					var tooth = halfTooth.union(halfTooth.mirroredX());
+					var toothCutout = this.createToothCutout(false);
+					//OpenJsCad.log("-2");
+					var tooth = toothSector.subtract(toothCutout);
+					//OpenJsCad.log("-1");
 
-					var gearShape = new CAG();
-					
-					for(var i = 0; i < this.toothCount; i++) {
-						var angle = i * this.angleToothToTooth;
-						var rotatedtooth = tooth.rotateZ(angle);
-						gearShape = gearShape.union(rotatedtooth);
+					// we could now take the toot cutout, rotate it tooth count times and union in the various slices together into a complete gear.
+					// However, the union operations become more and more complex with each tooth that is unioned.
+					// So instead we capture the outer path of the tooth concatenate rotated vesions of this path into a complete outer gear path.
+					// Concatenating paths is inexpensive resulting in significantly faster execution.
+					var outlinePaths = tooth.getOutlinePaths();
+					var corners = outlinePaths[0].points;
+
+					// first we need to find the corner that sits at the center
+					var centerCornerIndex;
+					for(var i = 0; i < corners.length; i++) {
+						var corner = corners[i];
+						if (corner.lengthSquared() < 0.0000001) {
+							centerCornerIndex = i;
+						}
+					}				
+					var outerPoints = [];
+					var outerCorners = [];
+					var outterPointsCount = corners.length - 2;
+					for(var i = 1; i < corners.length - 1; i++) {
+						var corner = corners[(i + centerCornerIndex) % corners.length];
+						outerCorners.push(corner);
+						outerPoints.push([corner.x, corner.y]);
 					}
+
+					// next we rotate the points that form one tooth and add them to the array; thus building out all the points that form the outer gear path.
+					for(var i = 1; i < this.toothCount; i++) {
+						var angle = i * this.angleToothToTooth;
+						var roatationMatrix = CSG.Matrix4x4.rotationZ(angle)
+						for (var j = 0; j < outerCorners.length; j++) {
+							var rotatedCorner = outerCorners[j].transform(roatationMatrix);
+							outerPoints.push([rotatedCorner.x, rotatedCorner.y]);
+						}
+						//OpenJsCad.log(i);
+					}
+					
+					var gearShape = CAG.fromPointsNoCheck(outerPoints);
 
 					if (this.centerHoleDiameter > 0) {
 						var centerhole = CAG.circle({center: [-0, -0], radius: this.centerHoleDiameter / 2, resolution: this.qualitySettings.resolution});
@@ -245,7 +276,7 @@
 					gearShape = gearShape.rotateZ(this.angle)
 					// move to correct center
 					gearShape = gearShape.translate(this.center);
-					return gearShape;
+					return gearShape;					
 				}
 				Gear.prototype.createCutoutDemo = function() {
 					// create outer circle
@@ -274,7 +305,7 @@
 					gearShape = gearShape.translate(this.center);
 					return gearShape;
 				}
-				Gear.prototype.createHalfToothCutout = function(asPath) {
+				Gear.prototype.createToothCutout = function(asPath) {
 					var angleToothToTooth = 360 / this.toothCount;
 					var angleStepSize = this.angleToothToTooth / this.qualitySettings.stepsPerToothAngle;
 					//OpenJsCad.log("angleToothToTooth: " + this.angleToothToTooth);
@@ -330,6 +361,7 @@
 				}
 				Gear.prototype.smoothen = function(shape) {
 					// the undercuts created by the cutout procedure leave corners. In this routine we fill out the valleys formed by one concave corner between two convex corners 
+					OpenJsCad.log("smooth start");
 					var outlinePaths = shape.getOutlinePaths();
 					var corners = outlinePaths[0].points;
 					
@@ -341,8 +373,8 @@
 						
 						var v1 = previousCorner.minus(currentCorner);
 						var v2 = nextCorner.minus(currentCorner);
-						OpenJsCad.log("v1 = [" + v1.x + ", " + v1.y + "]");
-						OpenJsCad.log("v2 = [" + v2.x + ", " + v2.y + "]");
+						//OpenJsCad.log("v1 = [" + v1.x + ", " + v1.y + "]");
+						//OpenJsCad.log("v2 = [" + v2.x + ", " + v2.y + "]");
 						
 						var crossProduct = v1.cross(v2);
 						isConvex.push(crossProduct < 0);
@@ -374,6 +406,8 @@
 					}				
 					
 					var cleanedUpShape = CAG.fromPoints(cleanedUpPoints);
+					OpenJsCad.log("smooth done");
+
 					return cleanedUpShape;
 				}
 				Gear.prototype.createToothCutter = function(asPath) {
