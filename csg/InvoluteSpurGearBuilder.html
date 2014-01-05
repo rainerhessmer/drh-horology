@@ -72,8 +72,16 @@
 	<p>An open source, browser based utility for calculating and drawing involute spur gears. As an improvement over the majority of other freely available scripts and utilities it fully accounts for undercuts. For additional information please head over to my <a href="http://www.hessmer.org/blog/2014/01/01/online-involute-spur-gear-builder">associated blog post</a>.</p>
 	<p>The implementation is inspired by the subtractive process that Michal Zalewski's describes in <a href="http://lcamtuf.coredump.cx/gcnc/ch6/#6.2">part six</a> of his excellent <a href=" http://lcamtuf.coredump.cx/gcnc/">Guerrilla guide to CNC machining, mold making, and resin casting</a>.</p>
     <h2>Instructions</h2>
-    <p>Specify desired values in the parameters box and then click on the 'Update' button. Dependent on the specified quality level the rendering might take some time. Once done, the result can be saved as a DXF file by clicking the 'Generate DXF' button underneath the graphics window.</p>
-    <p>Use the mouse scroll wheel or the slider underneath the window to zoom in and out. Press the left mouse button and move the mouse to pan.</p>
+    <p>Specify desired values in the parameters box and then click on the 'Update' button. The tooth count n1 of gear one defines various configurations: 
+    <ul>
+        <li>n1 > 0: A regular external gear <br><img src="RegularSpurGear_Small.png" alt="Regular Spur Gear"></li>
+		<li>n1 = 0: Rack and pinion <br><img src="RackAndPinion_Small.png" alt="Rack and Pinion"></li>
+        <li>n1 < 0: An internal gear as unsed in planetary gears <br><img src="InternalGear_Small.png" alt="Internal Gear"></li>
+    </ul>
+	</p>
+	<p>The tool also supports profile shift to reduce the amount of undercut in gears with low tooth counts. 
+	<p>The rendering of the gears at quality level 'normal' and 'high' can take a long time. Dependent on your browser you might get a warning message indicating an unresponsive script. Allow the script to continue and eventually the gear rendering should show up. Once the gears show up you can use the mouse scroll wheel or the slider underneath the window to zoom in and out. For panning move the mouse while pressing the left mouse button.</p>
+	<p>The result can be saved as a DXF file by clicking the 'Generate DXF' button underneath the graphics window.</p>
 	<div id="viewer"></div>
 
 	<div id="scriptContainer">
