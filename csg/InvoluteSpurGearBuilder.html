@@ -119,7 +119,7 @@
 					params.showOption);
 
 				var shape = gearSet.createShape();
-				OpenJsCad.log("returning shape");
+				OpenJsCad.log("returning gear set shape");
 				return shape;
 			}
 			
@@ -190,7 +190,6 @@
 					// common. Increasing the pressure angle increases the width of the base of the gear tooth, leading to greater strength and load carrying capacity. Decreasing
 					// the pressure angle provides lower backlash, smoother operation and less sensitivity to manufacturing errors. (reference: http://en.wikipedia.org/wiki/Involute_gear)
 
-					this.clearance = options.clearance || 0;
 					this.centerHoleDiameter = options.centerHoleDiameter || 0;
 
 					// Given either circular pitch or diametral pitch we calculate the other value
@@ -206,14 +205,11 @@
 						throw "gear module needs either a diametralPitch or circularPitch";
 					}
 					
-					this.backlash = options.backlash || 0;
-					if (this.backlash < 0) {
-						this.backlash = 0;
-					}
+					this.clearance = options.clearance == null ? 0 : options.clearance;
+					this.backlash = options.backlash == null ? 0 : options.backlash;
 
 					this.center = [0,0]; // center of the gear
 					this.angle = 0; // angle in degrees of the complete gear (changes during rotation animation)
-					
 
 					// Pitch diameter: Diameter of pitch circle.
 					this.pitchDiameter = this.toothCount / this.diametralPitch;
@@ -245,56 +241,62 @@
 						return this._createRegularGearShape();
 					}
 					else if (this.gearType == GearType.Internal) {
-						return this.createInternalGearShape();
+						return this._createInternalGearShape();
 					}
 					else if (this.gearType == GearType.Rack) {
 						return this._createRackShape();
 					}
 				}
-				Gear.prototype._createRackShape = function() {
-					var rack = new CAG();
-					var protoTooth = this._createRackTooth();
-					
-					// we draw one tooth in the middle and then five on either side
-					var toothCount = 21.0;
-					for (var i = 0; i < toothCount; i++) {
-						var tooth = protoTooth.translate([0, (0.5 + -toothCount / 2 + i) * this.circularPitch]);
-						rack = rack.union(tooth);
-					}
-					
-					// creating the bar backing the teeth
-					var rightX = -(this.addendum + this.clearance);
-					var width = 4 * this.addendum;
-					var halfHeight = toothCount * this.circularPitch / 2;
-					var bar = CAG.rectangle({corner1: [rightX - width, -halfHeight], corner2: [rightX, halfHeight]});
-
-					rack = rack.union(bar);
-					rack = rack.translate([this.addendum * this.profileShift, 0]);
-					return rack;
-				}
-				Gear.prototype._createRackTooth = function() {
-					var toothWidth = this.circularPitch / 2;
-					var toothDepth = this.addendum + this.clearance;
-					
-					var sinPressureAngle = Math.sin(this.pressureAngle * Math.PI / 180);
-					var cosPressureAngle = Math.cos(this.pressureAngle * Math.PI / 180);
-
-					// if a positive backlash is defined then we widen the trapezoid accordingly.
-					// Each side of the tooth needs to widened by a fourth of the backlash (vertical to cutter faces).
-					var dx = this.backlash / 4 / cosPressureAngle;
-					//OpenJsCad.log("backlash: " + this.backlash);
-					//OpenJsCad.log("dx: " + dx);
-					
-					var leftDepth = this.addendum + this.clearance;
-					var upperLeftCorner = [-leftDepth, toothWidth / 2 - dx + (this.addendum + this.clearance) * sinPressureAngle];
-					var upperRightCorner = [this.addendum, toothWidth / 2 - dx - this.addendum * sinPressureAngle];
-					var lowerRightCorner = [upperRightCorner[0], -upperRightCorner[1]];
-					var lowerLeftCorner = [upperLeftCorner[0], -upperLeftCorner[1]];
-					
-					return CAG.fromPoints([upperLeftCorner, upperRightCorner, lowerRightCorner, lowerLeftCorner]);
-				}
 				Gear.prototype._createRegularGearShape = function() {
-					// create outer circle sector covering half a tooth
+					var tooth = this._createSingleTooth();
+					//OpenJsCad.log("-1");
+
+					// we could now take the tooth cutout, rotate it tooth count times and union the various slices together into a complete gear.
+					// However, the union operations become more and more complex as the complete gear is built up.
+					// So instead we capture the outer path of the tooth and concatenate rotated versions of this path into a complete outer gear path.
+					// Concatenating paths is inexpensive resulting in significantly faster execution.
+					var outlinePaths = tooth.getOutlinePaths();
+					var corners = outlinePaths[0].points;
+
+					// first we need to find the corner that sits at the center
+					var centerCornerIndex;
+					for(var i = 0; i < corners.length; i++) {
+						var corner = corners[i];
+						if (corner.lengthSquared() < 0.0000001) {
+							centerCornerIndex = i;
+							break;
+						}
+					}				
+					var outerPoints = [];
+					var outerCorners = [];
+					var outterPointsCount = corners.length - 2;
+					for(var i = 1; i < corners.length - 1; i++) {
+						var corner = corners[(i + centerCornerIndex) % corners.length];
+						outerCorners.push(corner);
+						outerPoints.push([corner.x, corner.y]);
+					}
+
+					for(var i = 1; i < this.toothCount; i++) {
+						var angle = i * this.angleToothToTooth;
+						var roatationMatrix = CSG.Matrix4x4.rotationZ(angle)
+						for (var j = 0; j < outerCorners.length; j++) {
+							var rotatedCorner = outerCorners[j].transform(roatationMatrix);
+							outerPoints.push([rotatedCorner.x, rotatedCorner.y]);
+						}
+						//OpenJsCad.log(i);
+					}
+
+					var gearShape = CAG.fromPointsNoCheck(outerPoints);
+
+					if (this.centerHoleDiameter > 0) {
+						var centerhole = CAG.circle({center: [-0, -0], radius: this.centerHoleDiameter / 2, resolution: this.qualitySettings.resolution});
+						gearShape = gearShape.subtract(centerhole);
+					}
+
+					return gearShape.rotateZ(-90);
+				}
+				Gear.prototype._createSingleTooth = function() {
+					// create outer circle sector covering one tooth
 					var toothSectorPath = new CSG.Path2D([[0,0]], /* closed = */ false);
 					var toothSectorArc = CSG.Path2D.arc({
 						center: [0, 0],
@@ -310,51 +312,7 @@
 					var toothCutout = this.createToothCutout(false);
 					//OpenJsCad.log("-2");
 					var tooth = toothSector.subtract(toothCutout);
-					//OpenJsCad.log("-1");
-
-					// we could now take the toot cutout, rotate it tooth count times and union in the various slices together into a complete gear.
-					// However, the union operations become more and more complex with each tooth that is unioned.
-					// So instead we capture the outer path of the tooth concatenate rotated vesions of this path into a complete outer gear path.
-					// Concatenating paths is inexpensive resulting in significantly faster execution.
-					var outlinePaths = tooth.getOutlinePaths();
-					var corners = outlinePaths[0].points;
-
-					// first we need to find the corner that sits at the center
-					var centerCornerIndex;
-					for(var i = 0; i < corners.length; i++) {
-						var corner = corners[i];
-						if (corner.lengthSquared() < 0.0000001) {
-							centerCornerIndex = i;
-						}
-					}				
-					var outerPoints = [];
-					var outerCorners = [];
-					var outterPointsCount = corners.length - 2;
-					for(var i = 1; i < corners.length - 1; i++) {
-						var corner = corners[(i + centerCornerIndex) % corners.length];
-						outerCorners.push(corner);
-						outerPoints.push([corner.x, corner.y]);
-					}
-
-					// next we rotate the points that form one tooth and add them to the array; thus building out all the points that form the outer gear path.
-					for(var i = 1; i < this.toothCount; i++) {
-						var angle = i * this.angleToothToTooth;
-						var roatationMatrix = CSG.Matrix4x4.rotationZ(angle)
-						for (var j = 0; j < outerCorners.length; j++) {
-							var rotatedCorner = outerCorners[j].transform(roatationMatrix);
-							outerPoints.push([rotatedCorner.x, rotatedCorner.y]);
-						}
-						//OpenJsCad.log(i);
-					}
-					
-					var gearShape = CAG.fromPointsNoCheck(outerPoints);
-
-					if (this.centerHoleDiameter > 0) {
-						var centerhole = CAG.circle({center: [-0, -0], radius: this.centerHoleDiameter / 2, resolution: this.qualitySettings.resolution});
-						gearShape = gearShape.subtract(centerhole);
-					}
-					
-					return gearShape.rotateZ(-90);
+					return tooth;
 				}
 				Gear.prototype.createCutoutDemo = function() {
 					// create outer circle
@@ -428,62 +386,15 @@
 						stepCounter++;
 					}
 					
-					toothCutout = this.smoothen(toothCutout);
-					//var outlinePaths = toothCutout.getOutlinePaths();
-
-					//OpenJsCad.log(this.pointsToString(outlinePaths[0].points));
-					//OpenJsCad.log(toothCutout.isSelfIntersecting());
-					
-					
-					return toothCutout.rotateZ(-this.angleToothToTooth / 2);
-				}
-				Gear.prototype.smoothen = function(shape) {
-					// the undercuts created by the cutout procedure leave corners. In this routine we fill out the valleys formed by one concave corner between two convex corners 
-					var outlinePaths = shape.getOutlinePaths();
+					var outlinePaths = toothCutout.getOutlinePaths();
 					var corners = outlinePaths[0].points;
+					var cleanedUpCorners = this._smoothConcaveCorners(corners);
 					
-					var isConvex = [];
-					var previousCorner = corners[corners.length - 1];
-					var currentCorner = corners[0];
-					for(var i = 0; i < corners.length; i++) {
-						var nextCorner = corners[(i + 1) % corners.length];
-						
-						var v1 = previousCorner.minus(currentCorner);
-						var v2 = nextCorner.minus(currentCorner);
-						//OpenJsCad.log("v1 = [" + v1.x + ", " + v1.y + "]");
-						//OpenJsCad.log("v2 = [" + v2.x + ", " + v2.y + "]");
-						
-						var crossProduct = v1.cross(v2);
-						isConvex.push(crossProduct < 0);
-						
-						//OpenJsCad.log(i + ": " + isConvex + " --- " + crossProduct);
-						previousCorner = currentCorner;
-						currentCorner = nextCorner;
-					}
-					// we want to remove any concave corners that are located between two convex corners
-					var cleanedUpPoints = [];
-					var previousIndex = corners.length - 1;
-					var currentIndex = 0;
-					for(var i = 0; i < corners.length; i++) {
-						var corner = corners[currentIndex];
-						var nextIndex = (i + 1) % corners.length;
-						if (isConvex[currentIndex]) {
-							// convex - we always keep it
-							cleanedUpPoints.push([corner.x, corner.y]);
-						}
-						else {
-							// the vertex is concave
-							if (!(isConvex[previousIndex] && isConvex[nextIndex])) {
-								// it is not surrounded by two convex corners so we keep it
-								cleanedUpPoints.push([corner.x, corner.y]);
-							}
-						}
-						previousIndex = currentIndex;
-						currentIndex = nextIndex;
-					}				
-					
-					var cleanedUpShape = CAG.fromPoints(cleanedUpPoints);
-					return cleanedUpShape;
+					var points = [];
+					cleanedUpCorners.map(function(corner) { points.push([corner.x, corner.y]); });
+
+					var toothCutout = CAG.fromPoints(points);
+					return toothCutout.rotateZ(-this.angleToothToTooth / 2);
 				}
 				Gear.prototype.createToothCutter = function(asPath) {
 					// we create a trapezoidal cutter as described at http://lcamtuf.coredump.cx/gcnc/ch6/ under the section 'Putting it all together'
@@ -503,7 +414,7 @@
 
 					// if a positive backlash is defined then we widen the trapezoid accordingly.
 					// Each side of the tooth needs to widened by a fourth of the backlash (vertical to cutter faces).
-					var dx = this.backlash / 4 / cosPressureAngle;
+					var dx = this.backlash / 2 / cosPressureAngle;
 					//OpenJsCad.log("backlash: " + this.backlash);
 					//OpenJsCad.log("dx: " + dx);
 					
@@ -531,6 +442,222 @@
 						lowerLeftCorner: cutterPath.points[0] 
 					}
 				}
+				Gear.prototype._createInternalGearShape = function() {
+					var singleTooth = this._createInternalToothProfile();
+					//return singleTooth;
+
+					var outlinePaths = singleTooth.getOutlinePaths();
+					var corners = outlinePaths[0].points;
+
+					// first we need to find the corner that sits at the center
+					var centerCornerIndex;
+					var radius = this.pitchRadius + ( 1 + this.profileShift) * this.addendum + this.clearance;
+
+					var delta = 0.0000001;
+					for(var i = 0; i < corners.length; i++) {
+						var corner = corners[i];
+						if (corner.y < delta && (corner.x + radius) < delta) {
+							centerCornerIndex = i;
+							break;
+						}
+					}				
+					var outerCorners = [];
+					for(var i = 2; i < corners.length - 2; i++) {
+						var corner = corners[(i + centerCornerIndex) % corners.length];
+						outerCorners.push(corner);
+					}
+					
+					outerCorners.reverse();
+					var cornersCount = outerCorners.length;
+
+					for(var i = 1; i < this.toothCount; i++) {
+						var angle = i * this.angleToothToTooth;
+						var roatationMatrix = CSG.Matrix4x4.rotationZ(angle)
+						for (var j = 0; j < cornersCount; j++) {
+							var rotatedCorner = outerCorners[j].transform(roatationMatrix);
+							outerCorners.push(rotatedCorner);
+						}
+					}
+					
+					var outerCorners = this._smoothConcaveCorners(outerCorners);
+					var outerPoints = [];
+					outerCorners.map(function(corner) { outerPoints.push([corner.x, corner.y]); });
+
+					var innerRadius = this.pitchRadius + (1 - this.profileShift) * this.addendum + this.clearance;
+					var outerRadius = innerRadius + 4 * this.addendum;
+					var outerCircle = CAG.circle({center: this.center, radius: outerRadius, resolution: this.qualitySettings.resolution});
+					//return outerCircle;
+
+					var gearCutout = CAG.fromPointsNoCheck(outerPoints);
+					//return gearCutout;
+					return outerCircle.subtract(gearCutout);
+				}
+				Gear.prototype._createInternalToothProfile = function() {
+					var radius = this.pitchRadius + ( 1 - this.profileShift) * this.addendum + this.clearance;
+					var angleToothToTooth = 360 / this.toothCount;
+					var sin = Math.sin(angleToothToTooth / 2 * Math.PI / 180);
+					var cos = Math.cos(angleToothToTooth / 2 * Math.PI / 180);
+
+					var fullSector = CAG.fromPoints(
+						[
+							[0,0],
+							[-(radius * cos), radius * sin],
+							[-radius, 0],
+							[-(radius * cos), -radius * sin]
+						]
+					);
+					var innerCircle = CAG.circle({center: this.center, radius: radius - (2 * this.addendum + this.clearance), resolution: this.qualitySettings.resolution});
+					var sector = fullSector.subtract(innerCircle);
+					
+					var cutterTemplate = this._createInternalToothCutter();
+					
+					var pinion = this.connectedGear;
+					var angleToothToTooth = 360 / pinion.toothCount;
+					var stepsPerTooth = this.qualitySettings.stepsPerToothAngle;
+					var angleStepSize = angleToothToTooth / stepsPerTooth;
+					//OpenJsCad.log("angleToothToTooth: " + angleToothToTooth);
+					//OpenJsCad.log("this.qualitySettings.stepsPerToothAngle: " + this.qualitySettings.stepsPerToothAngle);
+					//OpenJsCad.log("count: " + this.qualitySettings.stepsPerToothAngle * this.toothCount / pinion.toothCount);
+					//OpenJsCad.log("angleStepSize: " + angleStepSize);
+					var toothShape = sector;
+					var cutter = cutterTemplate.translate([-this.pitchRadius + this.connectedGear.pitchRadius, 0]);
+					toothShape = toothShape.subtract(cutter);
+					
+					for(var i = 1; i < stepsPerTooth; i++) {
+						//OpenJsCad.log("i: " + i);
+						
+						var pinionRotationAngle = i * angleStepSize;
+						var pinionCenterRayAngle = -pinionRotationAngle * pinion.toothCount / this.toothCount;
+						//OpenJsCad.log("pinionRotationAngle: " + pinionRotationAngle);
+						//OpenJsCad.log("pinionCenterRayAngle: " + pinionCenterRayAngle);
+						
+						//var cutter = cutterTemplate;
+						cutter = cutterTemplate.rotateZ(pinionRotationAngle);
+						cutter = cutter.translate([-this.pitchRadius + this.connectedGear.pitchRadius, 0]);
+						cutter = cutter.rotateZ(pinionCenterRayAngle);
+						
+						toothShape = toothShape.subtract(cutter);
+						
+						cutter = cutterTemplate.rotateZ(-pinionRotationAngle);
+						cutter = cutter.translate([-this.pitchRadius + this.connectedGear.pitchRadius, 0]);
+						cutter = cutter.rotateZ(-pinionCenterRayAngle);
+						
+						toothShape = toothShape.subtract(cutter);
+					}
+					
+					return toothShape;
+				}
+				Gear.prototype._smoothConvexCorners = function(corners) {
+					// removes single convex corners located between concave corners
+					return this._smoothCorners(corners, /* removeSingleConvex= */ true);
+				}
+				Gear.prototype._smoothConcaveCorners = function(corners) {
+					// removes single concave corners located between convex corners
+					return this._smoothCorners(corners, /* removeSingleConvex= */ false);
+				}
+				Gear.prototype._smoothCorners = function(corners, removeSingleConvex) {
+					var isConvex = [];
+					var previousCorner = corners[corners.length - 1];
+					var currentCorner = corners[0];
+					for(var i = 0; i < corners.length; i++) {
+						var nextCorner = corners[(i + 1) % corners.length];
+						
+						var v1 = previousCorner.minus(currentCorner);
+						var v2 = nextCorner.minus(currentCorner);
+						var crossProduct = v1.cross(v2);
+						isConvex.push(crossProduct < 0);
+						
+						previousCorner = currentCorner;
+						currentCorner = nextCorner;
+					}
+					// we want to remove any concave corners that are located between two convex corners
+					var cleanedUpCorners = [];
+					var previousIndex = corners.length - 1;
+					var currentIndex = 0;
+					for(var i = 0; i < corners.length; i++) {
+						var corner = corners[currentIndex];
+						var nextIndex = (i + 1) % corners.length;
+						
+						var isSingleConcave = (!isConvex[currentIndex] && isConvex[previousIndex] && isConvex[nextIndex]);
+						var isSingleConvex = (isConvex[currentIndex] && !isConvex[previousIndex] && !isConvex[nextIndex]);
+						
+						previousIndex = currentIndex;
+						currentIndex = nextIndex;
+
+						if (removeSingleConvex && isSingleConvex) {
+							//OpenJsCad.log("skipping single convex: " + currentIndex);
+							continue;
+						}
+						if (!removeSingleConvex && isSingleConcave) {
+							//OpenJsCad.log("skipping single concave: " + currentIndex);
+							continue;
+						}
+						
+						cleanedUpCorners.push(corner);
+					}				
+					
+					return cleanedUpCorners;
+				}
+				Gear.prototype._createInternalToothCutter = function() {
+					// To cut the internal gear teeth, the actual pinion comes close but we need to enlarge it so properly cater for clearance and backlash
+					var pinion = this.connectedGear;
+					
+					var enlargedPinion = new Gear({
+						circularPitch: pinion.circularPitch,
+						pressureAngle: pinion.pressureAngle,
+						clearance: -pinion.clearance,
+						backlash: -pinion.backlash,
+						toothCount: pinion.toothCount,
+						centerHoleDiameter: 0,
+						profileShift: pinion.profileShift,
+						qualitySettings: pinion.qualitySettings
+					});
+					
+					var tooth = enlargedPinion._createSingleTooth();
+					return tooth.rotateZ(90 + 180 / enlargedPinion.toothCount); // we need a tooth pointing to the left
+				}
+				Gear.prototype._createRackShape = function() {
+					var rack = new CAG();
+					var protoTooth = this._createRackTooth();
+					
+					// we draw one tooth in the middle and then five on either side
+					var toothCount = 41.0;
+					for (var i = 0; i < toothCount; i++) {
+						var tooth = protoTooth.translate([0, (0.5 + -toothCount / 2 + i) * this.circularPitch]);
+						rack = rack.union(tooth);
+					}
+					
+					// creating the bar backing the teeth
+					var rightX = -(this.addendum + this.clearance);
+					var width = 4 * this.addendum;
+					var halfHeight = toothCount * this.circularPitch / 2;
+					var bar = CAG.rectangle({corner1: [rightX - width, -halfHeight], corner2: [rightX, halfHeight]});
+
+					rack = rack.union(bar);
+					rack = rack.translate([this.addendum * this.profileShift, 0]);
+					return rack;
+				}
+				Gear.prototype._createRackTooth = function() {
+					var toothWidth = this.circularPitch / 2;
+					var toothDepth = this.addendum + this.clearance;
+					
+					var sinPressureAngle = Math.sin(this.pressureAngle * Math.PI / 180);
+					var cosPressureAngle = Math.cos(this.pressureAngle * Math.PI / 180);
+
+					// if a positive backlash is defined then we widen the trapezoid accordingly.
+					// Each side of the tooth needs to widened by a fourth of the backlash (vertical to cutter faces).
+					var dx = this.backlash / 4 / cosPressureAngle;
+					//OpenJsCad.log("backlash: " + this.backlash);
+					//OpenJsCad.log("dx: " + dx);
+					
+					var leftDepth = this.addendum + this.clearance;
+					var upperLeftCorner = [-leftDepth, toothWidth / 2 - dx + (this.addendum + this.clearance) * sinPressureAngle];
+					var upperRightCorner = [this.addendum, toothWidth / 2 - dx - this.addendum * sinPressureAngle];
+					var lowerRightCorner = [upperRightCorner[0], -upperRightCorner[1]];
+					var lowerLeftCorner = [upperLeftCorner[0], -upperLeftCorner[1]];
+					
+					return CAG.fromPoints([upperLeftCorner, upperRightCorner, lowerRightCorner, lowerLeftCorner]);
+				}
 				Gear.prototype.pointsToString = function(points) {
 					var result = "[";
 					points.map(function(point) {
@@ -551,7 +678,10 @@
 					// in order for the two gears to mesh we need to turn the second one by 'half a tooth'
 					//this.gear1.setAngle(0);
 					this.gearRatio = this.gear1.toothCount / this.gear1.toothCount;
-					this.gearsDistance = this.gear1.pitchRadius + this.gear2.pitchRadius;
+					
+					var relativePitchRadius1 = (this.gear1.gearType == GearType.Internal) ? - this.gear1.pitchRadius : this.gear1.pitchRadius;
+					var relativePitchRadius2 = (this.gear2.gearType == GearType.Internal) ? - this.gear2.pitchRadius : this.gear2.pitchRadius;
+					this.gearsDistance = relativePitchRadius1 + relativePitchRadius2;
 
 					this.showOption = showOption;
 				}
@@ -571,9 +701,13 @@
 							// we need an angle offset of half a tooth for the two gears to mesh
 							var angle = 180 + 180 / this.gear2.toothCount;
 							// apply gear rotation
-							gear2Shape = gear2Shape.rotateZ(angle)
+							gear2Shape = gear2Shape.rotateZ(angle);
 						}
 						else if (this.gear2.gearType == GearType.Internal) {
+							// we need an angle offset of half a tooth for the two gears to mesh
+							var angle = 180; // + 180 / this.gear2.toothCount;
+							// apply gear rotation
+							gear2Shape = gear2Shape.rotateZ(angle);
 						}
 						else if (this.gear2.gearType == GearType.Rack) {
 							gear2Shape = gear2Shape.rotateZ(180);
