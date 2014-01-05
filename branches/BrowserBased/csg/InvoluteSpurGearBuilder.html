@@ -3,7 +3,7 @@
 <head>
 	<title>Involute Spur Gear Builder</title>
 	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
-	<meta name="description" content="Involute spur gear builder with DXF output. Licensed under the MIT license (http://opensource.org/licenses/mit-license.php). Copyright 2013 Dr. Rainer Hessmer">
+	<meta name="description" content="Involute spur gear builder with DXF output. Licensed under the MIT license (http://opensource.org/licenses/mit-license.php). Copyright 2014 Dr. Rainer Hessmer">
 	<meta name="author" content="Dr. Rainer Hessmer">
 
 	<script type="text/javascript" src="OpenJsCad/lightgl.js" ></script>
@@ -68,7 +68,7 @@
 </head>
 
 <body onload="onload()">
-	<h1>Involute Spur Gear Builder <span style="font-size:10px">(C) 2013 Dr. Rainer Hessmer</span></h1>
+	<h1>Involute Spur Gear Builder <span style="font-size:10px">(C) 2014 Dr. Rainer Hessmer</span></h1>
 	<p>An open source, browser based utility for calculating and drawing involute spur gears. As an improvement over the majority of other freely available scripts and utilities it fully accounts for undercuts. For additional information please head over to my <a href="http://www.hessmer.org/blog/2014/01/01/online-involute-spur-gear-builder">associated blog post</a>.</p>
 	<p>The implementation is inspired by the subtractive process that Michal Zalewski's describes in <a href="http://lcamtuf.coredump.cx/gcnc/ch6/#6.2">part six</a> of his excellent <a href=" http://lcamtuf.coredump.cx/gcnc/">Guerrilla guide to CNC machining, mold making, and resin casting</a>.</p>
     <h2>Instructions</h2>
@@ -78,8 +78,14 @@
 
 	<div id="scriptContainer">
 		<script type="text/javascript">
-			// this is the jscad script
+			// Involute spur gear builder jscad script. Licensed under the MIT license (http://opensource.org/licenses/mit-license.php). Copyright 2014 Dr. Rainer Hessmer
 			var g_ExpandToCAGParams = {pathradius: 0.01, resolution: 2};
+
+			var GearType = {
+				Regular: 0,
+				Internal: 1,
+				Rack: 2
+			};
 
 			function main(params)
 			{
@@ -93,7 +99,7 @@
 					backlash: params.backlash,
 					toothCount: params.wheel1ToothCount,
 					centerHoleDiameter: params.wheel1CenterHoleDiamater,
-					circularPitch: params.circularPitch,
+					profileShift: -params.profileShift,
 					qualitySettings: qualitySettings
 				});
 				var gear2 = new Gear({
@@ -103,7 +109,7 @@
 					backlash: params.backlash,
 					toothCount: params.wheel2ToothCount,
 					centerHoleDiameter: params.wheel2CenterHoleDiamater,
-					circularPitch: params.circularPitch,
+					profileShift: params.profileShift,
 					qualitySettings: qualitySettings
 				});
 						
@@ -141,6 +147,7 @@
 					{ name: 'pressureAngle', caption: 'Pressure Angle (common values are 14.5, 20 and 25 degrees):', type: 'float', initial: 20 },
 					{ name: 'clearance', caption: 'Clearance (minimal distance between the apex of a tooth and the trough of the other gear; in length units):', type: 'float', initial: 0.05 },
 					{ name: 'backlash', caption: 'Backlash (minimal distance between meshing gears; in length units):', type: 'float', initial: 0.05 },
+					{ name: 'profileShift', caption: 'Profile Shift (indicates what portion of gear one\'s addendum height should be shifted to gear two. E.g., a value of 0.1 means the adddendum of gear two is increased by a factor of 1.1 while the height of the addendum of gear one is reduced to 0.9 of its normal height.):', type: 'float', initial: 0.0 },
 					{ name: 'wheel1ToothCount', caption: 'Wheel 1 Tooth Count:', type: 'int', initial: 30 },
 					{ name: 'wheel1CenterHoleDiamater', caption: 'Wheel 1 Center Hole Diameter (0 for no hole):', type: 'float', initial: 4 },
 					{ name: 'wheel2ToothCount', caption: 'Wheel 2 Tooth Count:', type: 'int', initial: 8 },
@@ -164,7 +171,19 @@
 				function Gear(options) {
 					var options = options || {};
 
-					this.toothCount = options.toothCount || 15;
+					this.toothCount = options.toothCount == null ? 15 : options.toothCount;
+					if (this.toothCount > 0) {
+						this.gearType = GearType.Regular;
+					}
+					else if (this.toothCount < 0) {
+						this.gearType = GearType.Internal;
+						this.toothCount = -this.toothCount;
+					}
+					else {
+						// this.toothCount  == 0
+						this.gearType = GearType.Rack;
+					}					
+					
 					this.circularPitch = options.circularPitch;    // Distance from one face of a tooth to the corresponding face of an adjacent tooth on the same gear, measured along the pitch circle.
 					this.diametralPitch = options.diametralPitch;  // Ratio of the number of teeth to the pitch diameter
 					this.pressureAngle = options.pressureAngle || 20; // Most common stock gears have a 20° pressure angle, with 14½° and 25° pressure angle gears being much less
@@ -202,15 +221,79 @@
 
 					// Addendum: Radial distance from pitch circle to outside circle.
 					this.addendum = 1 / this.diametralPitch;
+					this.profileShift = options.profileShift || 0;
+					
+					// Typically no profile shift is used meaning that this.shiftedAddendum = this.addendum 
+					this.shiftedAddendum = this.addendum * (1 + this.profileShift);
 
 					//Outer Circle
-					this.outerRadius = this.pitchRadius + this.addendum;
+					this.outerRadius = this.pitchRadius + this.shiftedAddendum;
 					this.angleToothToTooth = 360 / this.toothCount;
 					this.qualitySettings = options.qualitySettings;
 					//OpenJsCad.log("qualitySettings.resolution: " + this.qualitySettings.resolution);
 					//OpenJsCad.log("qualitySettings.stepsPerToothAngle: " + this.qualitySettings.stepsPerToothAngle);
 				}
-				Gear.prototype.createShape = function() {
+				Gear.prototype.getZeroedShape = function() {
+					// return the gear shape center on the origin and rotation angle 0.
+					if (this.zeroedShape == null) {
+						this.zeroedShape = this._createZeroedShape();
+					}
+					return this.zeroedShape;
+				}
+				Gear.prototype._createZeroedShape = function() {
+					if (this.gearType == GearType.Regular) {
+						return this._createRegularGearShape();
+					}
+					else if (this.gearType == GearType.Internal) {
+						return this.createInternalGearShape();
+					}
+					else if (this.gearType == GearType.Rack) {
+						return this._createRackShape();
+					}
+				}
+				Gear.prototype._createRackShape = function() {
+					var rack = new CAG();
+					var protoTooth = this._createRackTooth();
+					
+					// we draw one tooth in the middle and then five on either side
+					var toothCount = 21.0;
+					for (var i = 0; i < toothCount; i++) {
+						var tooth = protoTooth.translate([0, (0.5 + -toothCount / 2 + i) * this.circularPitch]);
+						rack = rack.union(tooth);
+					}
+					
+					// creating the bar backing the teeth
+					var rightX = -(this.addendum + this.clearance);
+					var width = 4 * this.addendum;
+					var halfHeight = toothCount * this.circularPitch / 2;
+					var bar = CAG.rectangle({corner1: [rightX - width, -halfHeight], corner2: [rightX, halfHeight]});
+
+					rack = rack.union(bar);
+					rack = rack.translate([this.addendum * this.profileShift, 0]);
+					return rack;
+				}
+				Gear.prototype._createRackTooth = function() {
+					var toothWidth = this.circularPitch / 2;
+					var toothDepth = this.addendum + this.clearance;
+					
+					var sinPressureAngle = Math.sin(this.pressureAngle * Math.PI / 180);
+					var cosPressureAngle = Math.cos(this.pressureAngle * Math.PI / 180);
+
+					// if a positive backlash is defined then we widen the trapezoid accordingly.
+					// Each side of the tooth needs to widened by a fourth of the backlash (vertical to cutter faces).
+					var dx = this.backlash / 4 / cosPressureAngle;
+					//OpenJsCad.log("backlash: " + this.backlash);
+					//OpenJsCad.log("dx: " + dx);
+					
+					var leftDepth = this.addendum + this.clearance;
+					var upperLeftCorner = [-leftDepth, toothWidth / 2 - dx + (this.addendum + this.clearance) * sinPressureAngle];
+					var upperRightCorner = [this.addendum, toothWidth / 2 - dx - this.addendum * sinPressureAngle];
+					var lowerRightCorner = [upperRightCorner[0], -upperRightCorner[1]];
+					var lowerLeftCorner = [upperLeftCorner[0], -upperLeftCorner[1]];
+					
+					return CAG.fromPoints([upperLeftCorner, upperRightCorner, lowerRightCorner, lowerLeftCorner]);
+				}
+				Gear.prototype._createRegularGearShape = function() {
 					// create outer circle sector covering half a tooth
 					var toothSectorPath = new CSG.Path2D([[0,0]], /* closed = */ false);
 					var toothSectorArc = CSG.Path2D.arc({
@@ -271,12 +354,7 @@
 						gearShape = gearShape.subtract(centerhole);
 					}
 					
-					// apply gear rotation
-					//OpenJsCad.log(this.angle);
-					gearShape = gearShape.rotateZ(this.angle)
-					// move to correct center
-					gearShape = gearShape.translate(this.center);
-					return gearShape;					
+					return gearShape.rotateZ(-90);
 				}
 				Gear.prototype.createCutoutDemo = function() {
 					// create outer circle
@@ -361,7 +439,6 @@
 				}
 				Gear.prototype.smoothen = function(shape) {
 					// the undercuts created by the cutout procedure leave corners. In this routine we fill out the valleys formed by one concave corner between two convex corners 
-					OpenJsCad.log("smooth start");
 					var outlinePaths = shape.getOutlinePaths();
 					var corners = outlinePaths[0].points;
 					
@@ -406,8 +483,6 @@
 					}				
 					
 					var cleanedUpShape = CAG.fromPoints(cleanedUpPoints);
-					OpenJsCad.log("smooth done");
-
 					return cleanedUpShape;
 				}
 				Gear.prototype.createToothCutter = function(asPath) {
@@ -415,6 +490,7 @@
 					var toothWidth = this.circularPitch / 2;
 					//OpenJsCad.log("toothWidth: " + toothWidth);
 					OpenJsCad.log("addendum: " + this.addendum);
+					OpenJsCad.log("shiftedAddendum: " + this.shiftedAddendum);
 					OpenJsCad.log("clearance: " + this.clearance);
 					
 					var cutterDepth = this.addendum + this.clearance;
@@ -431,8 +507,8 @@
 					//OpenJsCad.log("backlash: " + this.backlash);
 					//OpenJsCad.log("dx: " + dx);
 					
-					var lowerRightCorner = [toothWidth / 2 + dx - cutterDepth * sinPressureAngle, this.pitchRadius - cutterDepth];
-					var upperRightCorner = [toothWidth / 2 + dx  + cutterOutsideLength * sinPressureAngle, this.pitchRadius + cutterOutsideLength];
+					var lowerRightCorner = [toothWidth / 2 + dx - cutterDepth * sinPressureAngle, this.pitchRadius + this.profileShift * this.addendum - cutterDepth];
+					var upperRightCorner = [toothWidth / 2 + dx  + cutterOutsideLength * sinPressureAngle, this.pitchRadius + this.profileShift * this.addendum + cutterOutsideLength];
 					var upperLeftCorner = [-upperRightCorner[0], upperRightCorner[1]];
 					var lowerLeftCorner = [-lowerRightCorner[0], lowerRightCorner[1]];
 					
@@ -475,11 +551,7 @@
 					// in order for the two gears to mesh we need to turn the second one by 'half a tooth'
 					//this.gear1.setAngle(0);
 					this.gearRatio = this.gear1.toothCount / this.gear1.toothCount;
-					this.gearsDistance = this.gear1.pitchRadius + this.gear2.pitchRadius;	
-					this.gear2.center = [0, this.gearsDistance];
-					
-					// we need an angle offset of half a tooth for the two gears to mesh
-					this.gear2.angle = 180 + 180 / this.gear2.toothCount;
+					this.gearsDistance = this.gear1.pitchRadius + this.gear2.pitchRadius;
 
 					this.showOption = showOption;
 				}
@@ -487,13 +559,30 @@
 					var shape = new CAG();
 					if ((this.showOption & 1) > 0) {
 						// show gear 1
-						var gear1Shape = this.gear1.createShape();
+						var gear1Shape = this.gear1.getZeroedShape();
 						//var gear1Shape = this.gear1.createCutoutDemo();
 						shape = shape.union(gear1Shape);
 					}
 					if ((this.showOption & 2) > 0) {
 						// show gear 2
-						var gear2Shape = this.gear2.createShape();
+						var gear2Shape = this.gear2.getZeroedShape();
+						
+						if (this.gear2.gearType == GearType.Regular) {
+							// we need an angle offset of half a tooth for the two gears to mesh
+							var angle = 180 + 180 / this.gear2.toothCount;
+							// apply gear rotation
+							gear2Shape = gear2Shape.rotateZ(angle)
+						}
+						else if (this.gear2.gearType == GearType.Internal) {
+						}
+						else if (this.gear2.gearType == GearType.Rack) {
+							gear2Shape = gear2Shape.rotateZ(180);
+							gear2Shape = gear2Shape.translate([0, this.gear2.circularPitch / 2]);
+						}
+
+						// move to correct center
+						gear2Shape = gear2Shape.translate([this.gearsDistance, 0]);
+
 						//var gear2Shape = this.gear2.createCutoutDemo();
 						shape = shape.union(gear2Shape);
 					}
@@ -509,7 +598,7 @@
     <h2>License and Credits</h2>
 
     <ul>
-        <li>The application itself, as well as the application specific source code is copyright (c) 2013 Dr. Rainer Hessmer and is covered by the permissive MIT license.</li>
+        <li>The application itself, as well as the application specific source code is copyright (c) 2014 Dr. Rainer Hessmer and is covered by the permissive MIT license.</li>
 		<li>Many thanks to Michal Zalewski's for his <a href=" http://lcamtuf.coredump.cx/gcnc/">Guerrilla guide to CNC machining, mold making, and resin casting</a>. In particular see section <a href="http://lcamtuf.coredump.cx/gcnc/ch6/#6.2">'Creating spur gears'</a>.</li>
         <li>This web page heavily leverages the <a href="http://joostn.github.io/OpenJsCad/">OpenJsCad</a> framework developed by <a href="https://github.com/joostn">Joost Nieuwenhuijse</a>. <a href="http://joostn.github.io/OpenJsCad/">OpenJsCad</a> in turn leverages the <a href="https://github.com/evanw/csg.js">initial CSG.js</a> copyright (c) 2011 <a href="https://github.com/evanw">Evan Wallace</a> and <a href="https://github.com/evanw/lightgl.js">lightgl.js</a> by <a href="https://github.com/evanw"> Evan Wallace</a> and <a href="https://github.com/toaarnio"> Tomi Aarnio</a> for WebGL rendering. Contributions by <a href="https://github.com/alx"> Alexandre Girard</a>, <a href="https://github.com/tlrobinson">Tom Robinson</a>, <a href="https://github.com/jboecker">jboecker</a>, <a href="https://github.com/risacher">risacher</a> and <a href="https://github.com/tedbeer">tedbeer</a>. All code released under the MIT license.</li>
     </ul>
