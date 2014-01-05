@@ -169,8 +169,6 @@
 					
 					// apply gear rotation
 					gearGraphics = gearGraphics.rotateZ(this.angle)
-					// rotate so that 0 degrees points to the right
-					gearGraphics = gearGraphics.rotateZ(90)
 					// move to correct center
 					gearGraphics = gearGraphics.translate(this.center);
 					return gearGraphics;
@@ -282,7 +280,7 @@
 					this.innerRadius = this.pitchDiameter / 2 - this.dedendum;
 					this.outerRadius = this.pitchDiameter / 2 + this.addendum;
 					
-					this.center = [0, this.gearSet.wheelPinionDistance];
+					this.center = [this.gearSet.wheelPinionDistance, 0];
 					// we need an angle offset of half a tooth for the two gears to mesh
 					var offset = 180 + 180 / this.toothCount;
 					this.angle = offset;
