@@ -62,7 +62,7 @@
 		function updateSolid()
 		{
 		  var jscadCode = document.getElementById('scriptContainer').getElementsByTagName("script")[0].text;
-		  gProcessor.setJsCad(jscadCode, "CycloidalGear");
+		  gProcessor.setJsCad(jscadCode, "InvoluteGear");
 		}
 	</script>
 </head>
@@ -76,11 +76,11 @@
     <ul>
         <li>n1 > 0: A regular external gear <br><img src="RegularSpurGear_Small.png" alt="Regular Spur Gear"></li>
 		<li>n1 = 0: Rack and pinion <br><img src="RackAndPinion_Small.png" alt="Rack and Pinion"></li>
-        <li>n1 < 0: An internal gear as unsed in planetary gears <br><img src="InternalGear_Small.png" alt="Internal Gear"></li>
+        <li>n1 < 0: An internal gear as used in planetary gears <br><img src="InternalGear_Small.png" alt="Internal Gear"></li>
     </ul>
 	</p>
 	<p>The tool also supports profile shift to reduce the amount of undercut in gears with low tooth counts. 
-	<p>The rendering of the gears at quality level 'normal' and 'high' can take a long time. Dependent on your browser you might get a warning message indicating an unresponsive script. Allow the script to continue and eventually the gear rendering should show up. Once the gears show up you can use the mouse scroll wheel or the slider underneath the window to zoom in and out. For panning move the mouse while pressing the left mouse button.</p>
+	<p>The rendering of the gears can take a long time particularly if the quality parameters ('number of rotation steps' and 'number of segments per 360 degree' are increased. Dependent on your browser you might get a warning message indicating an unresponsive script. Allow the script to continue and eventually the gear rendering should show up. Once the gears show up you can use the mouse scroll wheel or the slider underneath the window to zoom in and out. For panning move the mouse while pressing the left mouse button.</p>
 	<p>The result can be saved as a DXF file by clicking the 'Generate DXF' button underneath the graphics window.</p>
 	<div id="viewer"></div>
 
@@ -98,7 +98,7 @@
 			function main(params)
 			{
 				// Main entry point; here we construct our solid:
-				var qualitySettings = initializeQualitySettings(params.qualityOption)
+				var qualitySettings = {resolution: params.resolution, stepsPerToothAngle: params.stepsPerToothAngle};
 
 				var gear1 = new Gear({
 					circularPitch: params.circularPitch,
@@ -130,28 +130,10 @@
 				OpenJsCad.log("returning gear set shape");
 				return shape;
 			}
-			
-			function initializeQualitySettings(qualityOption) {
-				// default values (draft quality)
-				var resolution = 30;  // Number of segments used per 360 degrees when drawing curves
-				var stepsPerToothAngle = 3; // determines the angular step size when assembling the tooth profile
-				
-				if (qualityOption == 1) {
-					// normal quality
-					resolution = 180;
-					stepsPerToothAngle = 10;
-				}
-				else if (qualityOption == 2) {
-					// high quality
-					resolution = 360;
-					stepsPerToothAngle = 20;
-				}
-				return {resolution: resolution, stepsPerToothAngle: stepsPerToothAngle};
-			}
 
 			function getParameterDefinitions() {
 				return [
-					{ name: 'circularPitch', caption: 'Circular pitch (distance from one face of a tooth to the corresponding face of an adjacent tooth on the same gear, measured along the pitch circle):', type: 'float', initial: 8 },
+					{ name: 'circularPitch', caption: 'Circular pitch (the circumference of the pitch circle divided by the number of teeth):', type: 'float', initial: 8 },
 					{ name: 'pressureAngle', caption: 'Pressure Angle (common values are 14.5, 20 and 25 degrees):', type: 'float', initial: 20 },
 					{ name: 'clearance', caption: 'Clearance (minimal distance between the apex of a tooth and the trough of the other gear; in length units):', type: 'float', initial: 0.05 },
 					{ name: 'backlash', caption: 'Backlash (minimal distance between meshing gears; in length units):', type: 'float', initial: 0.05 },
@@ -161,8 +143,8 @@
 					{ name: 'wheel2ToothCount', caption: 'Wheel 2 Tooth Count:', type: 'int', initial: 8 },
 					{ name: 'wheel2CenterHoleDiamater', caption: 'Wheel 2 Center Hole Diameter (0 for no hole):', type: 'float', initial: 4 },
 					{ name: 'showOption', caption: 'Show:', type: 'choice', values: [3, 1, 2], initial: 3, captions: ["Wheel 1 and Wheel 2", "Wheel 1 Only", "Wheel 2 Only"]},
-					//{ name: 'resolution', caption: 'Resolution (number of segments per 360 degree of rotation, set to 200 or higher for production quality):', type: 'int', initial: 40 },
-					{ name: 'qualityOption', caption: 'Quality level (better means longer waits):', type: 'choice', values: [0, 1, 2], initial: 0, captions: ["Draft", "Normal", "High"]},
+					{ name: 'stepsPerToothAngle', caption: 'Rotation steps per tooth angle when assembling the tooth profile (3 = draft, 10 = good quality):', type: 'int', initial: 3 },
+					{ name: 'resolution', caption: 'Number of segments per 360 degree of rotation (only used for circles and arcs):', type: 'int', initial: 36 },
 				];
 			}
 
