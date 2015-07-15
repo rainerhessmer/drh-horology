@@ -143,8 +143,8 @@
 					{ name: 'wheel2ToothCount', caption: 'Wheel 2 Tooth Count:', type: 'int', initial: 8 },
 					{ name: 'wheel2CenterHoleDiamater', caption: 'Wheel 2 Center Hole Diameter (0 for no hole):', type: 'float', initial: 4 },
 					{ name: 'showOption', caption: 'Show:', type: 'choice', values: [3, 1, 2], initial: 3, captions: ["Wheel 1 and Wheel 2", "Wheel 1 Only", "Wheel 2 Only"]},
-					{ name: 'stepsPerToothAngle', caption: 'Rotation steps per tooth angle when assembling the tooth profile (3 = draft, 10 = good quality):', type: 'int', initial: 3 },
-					{ name: 'resolution', caption: 'Number of segments per 360 degree of rotation (only used for circles and arcs):', type: 'int', initial: 36 },
+					{ name: 'stepsPerToothAngle', caption: 'Rotation steps per tooth angle when assembling the tooth profile (3 = draft, 10 = good quality). Increasing the value will result in smoother profiles at the cost of significantly higher calcucation time. Incease in small increments and check the result by zooming in.', type: 'int', initial: 3 },
+					{ name: 'resolution', caption: 'Number of segments per 360 degree of rotation (only used for circles and arcs); 90 is plenty:', type: 'int', initial: 30 },
 				];
 			}
 
