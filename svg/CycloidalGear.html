@@ -1,0 +1,624 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" >
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+	<title>Cycloidal Gear Builder</title>
+	<meta name="description" content="Cycloidal gear builder with SVG output. Licensed under the MIT license (http://opensource.org/licenses/mit-license.php). Copyright 2012 Dr. Rainer Hessmer">
+	<meta name="author" content="Dr. Rainer Hessmer">
+	<style type="text/css">
+		@import ".lib/css/jquery.svg.css";
+	</style>
+
+	<!--script type="text/javascript" src="//ajax.googleapis.com/ajax/libs/jquery/1.8.2/jquery.min.js"></script-->
+	<script type="text/javascript" src="./lib/js/jquery-1.8.3.min.js"></script>
+	<script type="text/javascript" src="./lib/js/jquery.svg.js"></script>
+	<script type="text/javascript" src="./lib/js/TwoD.js"></script>
+
+	<script type="text/javascript">
+		(function ($) {
+			$(document).ready(function () {
+
+				$('#svg_container').svg();
+				var svg = $('#svg_container').svg('get');
+				//svg.configure({width: '400mm', height: '300mm', viewBox: '-200 -150 400 300'}, true);
+				svg.configure({style: "border: 1px solid #484;"});
+
+				var helperLinesStyle = {
+					fill: 'none', 
+					stroke: 'blue',
+					'stroke-width': 0.1
+				};
+
+				var regularLinesStyle = {
+					fill: 'none', 
+					stroke: 'black',
+					'stroke-width': 0.1
+				};
+				
+				var c_ErrorLimit = 0.000001;
+			
+				// string.format function like in .Net (see http://stackoverflow.com/questions/610406/javascript-equivalent-to-printf-string-format/4673436#4673436)
+				String.prototype.format = function() {
+					var args = arguments;
+					return this.replace(/{(\d+)}/g, function(match, number) { 
+						return typeof args[number] != 'undefined'
+							? args[number]
+							: match
+						;
+					});
+				};
+
+				// Generic support for 'class' inheritance (see TypeScript playground example 'Simple Inheritance' for details (http://www.typescriptlang.org/Playground/)
+				var __extends = this.__extends || function (d, b) {
+					function __() { this.constructor = d; }
+					__.prototype = b.prototype;
+					d.prototype = new __();
+				};
+				// End generic support for 'class' inheritance
+
+
+				// Start base class Gear
+				var Gear = (function () {
+					function Gear(options) {
+						var options = options || {};
+
+						this.toothCount = options.toothCount || 30;
+						this.centerHoleDiameter = options.centerHoleDiameter || 0;
+
+						this._center = [0,0]; // center of the gear
+						this._angle = 0; // angle in degrees of the complete gear (changes during rotation animation)
+					}
+					Gear.prototype.getCenter = function() {
+						return this._center;
+					}
+					Gear.prototype.setCenter = function(newCenter) {
+						this._center = newCenter;
+						this._updateSvgConfig();
+					}
+					Gear.prototype.getAngle = function() {
+						return this._angle;
+					}
+					Gear.prototype.setAngle = function(newAngle) {
+						this._setAngleNoSideEffect(newAngle)
+						if (this.connectedGear != null) {
+							// we need to turn the connected gear as well
+							var ratio = this.pitchDiameter / this.connectedGear.pitchDiameter;
+							// we need an angle offset of half a tooth for the two gears to mesh
+							var offset = 180 + 180 / this.connectedGear.toothCount;
+							this.connectedGear._setAngleNoSideEffect(offset - newAngle * ratio);
+						}
+					}
+					Gear.prototype._setAngleNoSideEffect = function(newAngle) {
+						// does not call into a connected gear and hence does not run the risk of an infinite loop
+						this._angle = newAngle;
+						this._updateSvgConfig();
+					}
+					Gear.prototype._updateSvgConfig = function() {
+						svg.configure(this.gearGroup, {transform: "rotate({0}, {1}, {2}) translate({1},{2})".format(this._angle, this._center[0], this._center[1])});
+					}
+					Gear.prototype.createSVG = function()
+					{
+						this.gearGroup = svg.group();
+						this._insertSvgHelperLines(this.gearGroup);
+
+						var teeth = this._getTeeth();
+						var path = svg.createPath();
+						path.move(teeth[0].dedendumIntersectLeft[0], teeth[0].dedendumIntersectLeft[1]);
+
+						for (var i = 0; i < teeth.length; i++)
+						{
+							tooth = teeth[i];
+							nextTooth = teeth[(i + 1) % teeth.length];
+							this._insertWheelToothPath(tooth, nextTooth, path);
+						}
+						path.close();
+						svg.path(this.gearGroup, path, regularLinesStyle);
+						if (this.centerHoleDiameter > 0) {
+							svg.circle(this.gearGroup, 0, 0, this.centerHoleDiameter / 2, regularLinesStyle);
+						}
+					}
+					Gear.prototype._insertSvgHelperLines = function(gearGroup)
+					{
+						if (this.gearSet.showHelperLines) {
+							var helperLinesGroup = svg.group(gearGroup, helperLinesStyle);
+							svg.circle(helperLinesGroup, 0, 0, this.pitchDiameter / 2);
+							svg.circle(helperLinesGroup, 0, 0, this.pitchDiameter / 2 + this.addendum);
+							svg.circle(helperLinesGroup, 0, 0, this.pitchDiameter / 2 - this.dedendum);
+							
+							var length = 5;
+							svg.line(helperLinesGroup, -length, 0, length, 0);
+							svg.line(helperLinesGroup, 0, -length, 0, length);
+						}
+					}
+					Gear.prototype._getTeeth = function() {
+						wheelTeeth = [];
+						angleBetweenTeeth = 2 * Math.PI / this.toothCount;
+						for (var i = 0; i < this.toothCount; i++) {
+							centerRayAngle = i * angleBetweenTeeth;
+							wheelTeeth[i] = new Tooth(this, centerRayAngle);
+						}
+						return wheelTeeth;
+					}
+					Gear.prototype._insertWheelToothPath = function(tooth, nextTooth, path) {
+						path.line(tooth.pitchCircleIntersectLeft[0], tooth.pitchCircleIntersectLeft[1]);
+						path.arc(this.addendumRadius, this.addendumRadius, 0, 0, 1, tooth.apex[0], tooth.apex[1]);
+						path.arc(this.addendumRadius, this.addendumRadius, 0, 0, 1, tooth.pitchCircleIntersectRight[0], tooth.pitchCircleIntersectRight[1]);
+						path.line(tooth.dedendumIntersectRight[0], tooth.dedendumIntersectRight[1]);
+
+						radius = this.pitchDiameter / 2.0 - this.dedendum;
+						path.arc(radius, radius, 0, 0, 1, nextTooth.dedendumIntersectLeft[0], nextTooth.dedendumIntersectLeft[1]);
+					}
+					return Gear;
+				})();
+
+				// Start class Tooth
+				var Tooth = (function () {
+					function Tooth(gear, centerRayAngle) {
+						this.gear = gear;
+						this.centerRayAngle = centerRayAngle;
+
+						var radius = gear.pitchDiameter / 2.0 + gear.addendum;
+
+						this.apex = [
+							gear._center[0] + Math.cos(this.centerRayAngle) * radius,
+							gear._center[1] + Math.sin(this.centerRayAngle) * radius
+						];
+
+						var leftFlankAngle = this.centerRayAngle - gear.halfToothAngle;
+						var rightFlankAngle = this.centerRayAngle + gear.halfToothAngle;
+
+						radius = gear.pitchDiameter / 2.0 - gear.dedendum;
+						this.dedendumIntersectLeft = [
+							gear._center[0] + Math.cos(leftFlankAngle) * radius,
+							gear._center[1] + Math.sin(leftFlankAngle) * radius
+						];
+						this.dedendumIntersectRight = [
+							gear._center[0] + Math.cos(rightFlankAngle) * radius,
+							gear._center[1] + Math.sin(rightFlankAngle) * radius
+						];
+
+						radius = gear.pitchDiameter / 2.0;
+						this.pitchCircleIntersectLeft = [
+							gear._center[0] + Math.cos(leftFlankAngle) * radius,
+							gear._center[1] + Math.sin(leftFlankAngle) * radius
+						];
+						this.pitchCircleIntersectRight = [
+							gear._center[0] + Math.cos(rightFlankAngle) * radius,
+							gear._center[1] + Math.sin(rightFlankAngle) * radius
+						];
+					}
+					return Tooth;
+				})();
+				
+
+				// Wheel class
+				var Wheel = (function (_super) {
+					__extends(Wheel, _super);
+					function Wheel(options) {
+						_super.call(this, options);
+						this.wheelDecoration = options.wheelDecoration;
+					}
+					Wheel.prototype.update1 = function() {
+						// update 1 calculates values that never depend on the matching gear
+						this.pitchDiameter = this.gearSet.module * this.toothCount;
+						this.addendum = this.gearSet.module * this.gearSet.practicalAddendumFactor;
+						this.addendumRadius = this.gearSet.module * 1.40 * this.gearSet.addendumFactor;
+						this.halfToothAngle = Math.PI / this.toothCount / 2;
+					}
+					Wheel.prototype.update2 = function() {
+						// stage 2 of the update; note that the dedendum can depend on the addendum of the other gear
+						if (this.gearSet.customSlopEnabled) {
+							this.dedendum = this.gearSet.pinion.addendum + this.gearSet.customSlop;
+						}
+						else {
+							this.dedendum = this.gearSet.module * Math.PI / 2;
+						}
+
+						this.innerRadius = this.pitchDiameter / 2 - this.dedendum;
+						this.outerRadius = this.pitchDiameter / 2 + this.addendum;
+					}
+					Wheel.prototype.createSVG = function() {
+						_super.prototype.createSVG.call(this);
+						if (this.wheelDecoration) {
+							this.wheelDecoration.createSVG(this.gearGroup);
+						}
+					}				
+					return Wheel;
+				})(Gear);
+
+
+				// Base class WheelDecoration
+				var WheelDecoration = (function () {
+					function WheelDecoration(wheel) {
+						this._wheel = wheel; // the wheel to decorate
+						wheel.wheelDecoration = this;
+					}
+					return WheelDecoration;
+				})();				
+
+				// Wheel CircularHolesDecoration
+				var CircularHolesDecoration = (function (_super) {
+					__extends(CircularHolesDecoration, _super);
+					function CircularHolesDecoration(wheel, options) {
+						_super.call(this, wheel);
+						var options = options || {};
+
+						this.circleCount = options.circleCount || 3;
+						this.innerRimRadius = options.innerRimRadius || wheel.innerRadius * 0.91; // the radius where the circular holes are furthest away from the center of the wheel
+						this.innerCircleRadius = options.innerCircleRadius || this.innerRimRadius / 2 * 0.8; // the radius of the holes cut into the wheel's face
+						this.centerRadius = options.centerRadius || this.innerRimRadius - this.innerCircleRadius; // the radius of the circle that the centers of the circles on the wheel's face lie on.
+
+						var rimThickness = wheel.innerRadius - this.innerRimRadius;
+						this.outerCircleRadius = options.outerCircleRadius || this.innerCircleRadius + rimThickness;  //* 1.02; // the radius of the holes cut into the wheel's face
+						this.filletRadius = options.filletRadius || this.innerRimRadius * 0.04; // the radius of the fillet circle that rounds out the cuts in between the circles.
+					}
+					CircularHolesDecoration.prototype.createSVG = function(gearGroup) {
+						this.decorationGroup = svg.group(gearGroup, regularLinesStyle);
+						var c0 = [0,0];
+						//svg.circle(this.decorationGroup, c0[0], c0[1], this.innerRimRadius);
+						var deltaAngle = 2 * Math.PI / this.circleCount; // angular distance between circles
+						
+						for(var i = 0; i < this.circleCount; i++) {
+							var angle = deltaAngle * i;
+							
+							var c1 = TwoD.polar2Cartesian(this.centerRadius, angle);                // center of the inner circle at the current angle
+							var c2 = TwoD.polar2Cartesian(this.centerRadius, angle + deltaAngle);   // center of the next inner circle
+							svg.circle(this.decorationGroup, c1[0], c1[1], this.innerCircleRadius);
+							//svg.circle(this.decorationGroup, c1[0], c1[1], this.outerCircleRadius);
+							
+							if (this.filletRadius <= 0) {
+								// we draw the cutouts without any fillets
+								var circleIntersections = TwoD.twoCirclesIntersections(c1, this.outerCircleRadius, c2, this.outerCircleRadius);
+								var intersectCenter = circleIntersections.p1;
+								//svg.circle(this.decorationGroup, intersectCenter[0], intersectCenter[1], 1);
+
+								circleIntersections = TwoD.twoCirclesIntersections(c0, this.innerRimRadius, c1, this.outerCircleRadius);
+								var intersectLeft = circleIntersections.p0;
+								//svg.circle(this.decorationGroup, intersectLeft[0], intersectLeft[1], 1);
+
+								circleIntersections = TwoD.twoCirclesIntersections(c0, this.innerRimRadius, c2, this.outerCircleRadius);
+								var intersectRight = circleIntersections.p1;
+								//svg.circle(this.decorationGroup, intersectRight[0], intersectRight[1], 1);
+
+								var path = svg.createPath();
+								path.move(intersectCenter[0], intersectCenter[1]);
+								
+								path.arc(this.outerCircleRadius, this.outerCircleRadius, 0, 0, 0, intersectLeft[0], intersectLeft[1]);
+								path.arc(this.innerRimRadius, this.innerRimRadius, 0, 0, 1, intersectRight[0], intersectRight[1]);
+								path.arc(this.outerCircleRadius, this.outerCircleRadius, 0, 0, 0, intersectCenter[0], intersectCenter[1]);
+
+								path.close();
+								svg.path(this.decorationGroup, path, regularLinesStyle);
+							}
+							else {
+								// we draw the cutouts with fillets
+								// outer fillets
+								var circleInfo0 = {
+									center: c0,
+									radius: this.innerRimRadius,
+									filletInside: true
+								};
+								var circleInfo1 = {
+									center: c1,
+									radius: this.outerCircleRadius,
+									filletInside: false
+								};
+								var outerFillet1Info = this.calcFilletInfo(circleInfo0, circleInfo1, this.filletRadius);
+								//this.debugDrawFilletInfo(outerFillet1Info, this.filletRadius, this.decorationGroup);
+
+								var circleInfo2 = {
+									center: c2,
+									radius: this.outerCircleRadius,
+									filletInside: false
+								};
+								var outerFillet2Info = this.calcFilletInfo(circleInfo2, circleInfo0, this.filletRadius);
+								//this.debugDrawFilletInfo(outerFillet2Info, this.filletRadius, this.decorationGroup);
+								
+								// inner fillet
+								var innerFilletInfo = this.calcFilletInfo(circleInfo2, circleInfo1, this.filletRadius);
+								//this.debugDrawFilletInfo(innerFilletInfo, this.filletRadius, this.decorationGroup);
+
+								var path = svg.createPath();
+								var endPoint;
+								endPoint = outerFillet1Info.touchPoints[0];
+								path.move(endPoint[0], endPoint[1]);
+								
+								endPoint = outerFillet2Info.touchPoints[1];
+								path.arc(this.innerRimRadius, this.innerRimRadius, 0, 0, 1, endPoint[0], endPoint[1]);
+								
+								endPoint = outerFillet2Info.touchPoints[0];
+								path.arc(this.filletRadius, this.filletRadius, 0, 0, 1, endPoint[0], endPoint[1]);
+								
+								endPoint = innerFilletInfo.touchPoints[0];
+								path.arc(this.outerCircleRadius, this.outerCircleRadius, 0, 0, 0, endPoint[0], endPoint[1]);
+								
+								endPoint = innerFilletInfo.touchPoints[1];
+								path.arc(this.filletRadius, this.filletRadius, 0, 0, 1, endPoint[0], endPoint[1]);
+
+								endPoint = outerFillet1Info.touchPoints[1];
+								path.arc(this.outerCircleRadius, this.outerCircleRadius, 0, 0, 0, endPoint[0], endPoint[1]);
+
+								endPoint = outerFillet1Info.touchPoints[0];
+								path.arc(this.filletRadius, this.filletRadius, 0, 0, 1, endPoint[0], endPoint[1]);
+
+								path.close();
+								svg.path(this.decorationGroup, path, regularLinesStyle);
+							}
+						}
+					}
+					// circle info consists of {center: [x,y], radius: r, filletInside: true/false} 
+					CircularHolesDecoration.prototype.calcFilletInfo = function(circleInfo0, circleInfo1, filletRadius) {
+						// we get the center of the fillet circle by calculating the intersection of the two circles enlarged or decreased by the fillet radius
+						var r0 = circleInfo0.filletInside ? circleInfo0.radius - filletRadius : circleInfo0.radius + filletRadius;
+						var r1 = circleInfo1.filletInside ? circleInfo1.radius - filletRadius : circleInfo1.radius + filletRadius;
+						var circleIntersections = TwoD.twoCirclesIntersections(circleInfo0.center, r0, circleInfo1.center, r1);
+						
+						var filletCenter = circleIntersections.p0;
+						
+						// calculating touch point 0 (where the first circle touches the fillet circle)
+						var c0ToFilletCenter = TwoD.substractVectors(filletCenter, circleInfo0.center);
+						var c0ToTouchPoint0 = TwoD.scaleVector(circleInfo0.radius / r0, c0ToFilletCenter);
+						var touchPoint0 = TwoD.addVectors(circleInfo0.center, c0ToTouchPoint0);
+						
+						// calculating touch point 1 (where the second circle touches the fillet circle)
+						var c1ToFilletCenter = TwoD.substractVectors(filletCenter, circleInfo1.center);
+						var c1ToTouchPoint1 = TwoD.scaleVector(circleInfo1.radius / r1, c1ToFilletCenter);
+						var touchPoint1 = TwoD.addVectors(circleInfo1.center, c1ToTouchPoint1);
+
+						return {
+							center: filletCenter,
+							touchPoints: [ touchPoint0, touchPoint1 ]
+						};
+					}
+					CircularHolesDecoration.prototype.debugDrawFilletInfo = function(filletInfo, filletRadius, svgGroup) {
+						svg.circle(svgGroup, filletInfo.center[0], filletInfo.center[1], filletRadius);
+						svg.circle(svgGroup, filletInfo.touchPoints[0][0], filletInfo.touchPoints[0][1], 1);
+						svg.circle(svgGroup, filletInfo.touchPoints[1][0], filletInfo.touchPoints[1][1], 1);
+					}
+
+					return CircularHolesDecoration;
+				})(WheelDecoration);
+				
+				// Pinion class
+				var Pinion = (function (_super) {
+					__extends(Pinion, _super);
+					function Pinion(options) {
+						_super.call(this, options);
+					}
+					Pinion.prototype.update1 = function() {
+						// update 1 calculates values that never depend on the matching gear
+						this.pitchDiameter = this.gearSet.module * this.toothCount;
+						this._initializeToothAngle();
+						this._initializeAddendum();
+					}
+					Pinion.prototype.update2 = function() {
+						// stage 2 of the update; note that the dedendum can depend on the addendum of the other gear
+						if (this.gearSet.customSlopEnabled) {
+							this.dedendum = this.gearSet.wheel.addendum + this.gearSet.customSlop;
+						}
+						else {
+							this.dedendum = this.gearSet.module * (this.gearSet.practicalAddendumFactor + 0.4);
+						}
+						
+						this.innerRadius = this.pitchDiameter / 2 - this.dedendum;
+						this.outerRadius = this.pitchDiameter / 2 + this.addendum;
+
+					}
+					Pinion.prototype._initializeToothAngle = function() {
+						// From http://www.csparks.com/watchmaking/CycloidalGears/index.jhtml:
+						// The nominal width of a tooth or a space when they are equally spaced is just pi/2, or about 1.57.
+						// For pinions, we will reduce the width of the tooth a bit. For pinions with 6-10 leaves, the tooth
+						// width at the pitch circle is 1.05. For pinions with 11 or more teeth the tooth width is 1.25. 
+						var factor = 0;
+						if (this.toothCount <= 10) {
+							factor = 1.05;
+						}
+						else {
+							factor = 1.25;
+						}
+
+						//factor = Math.PI / 2;
+						this.halfToothAngle = factor * this.gearSet.module / this.pitchDiameter;
+					}
+					Pinion.prototype._initializeAddendum = function() {
+						// For details see the Profile - Leaves tables in http://www.csparks.com/watchmaking/CycloidalGears/index.jhtml
+						if (this.toothCount <= 7) {
+							// high ogival
+							this.addendum = 0.855 * this.gearSet.module;
+							this.addendumRadius = 1.050 * this.gearSet.module;
+						}
+						else if (this.toothCount == 8 || this.toothCount == 9) {
+							// medium ogival
+							this.addendum = 0.670 * this.gearSet.module;
+							this.addendumRadius = 0.7 * this.gearSet.module;
+						}
+						else if (this.toothCount == 10) {
+							// round top for small tooth
+							this.addendum = 0.525 * this.gearSet.module;
+							this.addendumRadius = 0.525 * this.gearSet.module;
+						}
+						else {
+							// 11+ teeth, round top for wider tooth
+							this.addendum = 0.625 * this.gearSet.module;
+							this.addendumRadius = 0.625 * this.gearSet.module;
+						}
+					}
+					return Pinion;
+				})(Gear);
+				
+
+				// GearSet class
+				var GearSet = (function () {
+					function GearSet(wheel, pinion, options) {
+						wheel.gearSet = this;
+						wheel.connectedGear = pinion;
+						this.wheel = wheel;
+						
+						pinion.gearSet = this;
+						pinion.connectedGear = wheel;
+						this.pinion = pinion;
+
+						var options = options || {};
+						
+						// module mm. The diameter of the pitch circle in millimeters divided by the number of teeth
+						if (options.module !== undefined) {
+							this.module = options.module;
+						}
+						else if (options.wheelPinionDistance !== undefined) {
+							// we calculate module from the distance
+							this.module = 2 * options.wheelPinionDistance / (wheel.toothCount + pinion.toothCount);
+						}
+						else {
+							this.module = 4; 
+						}
+
+						if (options.customSlop === undefined) {
+							this.customSlopEnabled = false;
+						}
+						else {
+							this.customSlopEnabled = true;
+							this.customSlop = options.customSlop; // The slop in mm between the apex of one gear and the trough of the other. Only used if custom slop is enabled. Otherwise the default as described by Hugh Sparks is used.
+						}
+						if (options.showHelperLines === undefined) {
+							this.showHelperLines = false;
+						}
+						else {
+							this.showHelperLines = options.showHelperLines;
+						}
+						this.update();
+						//this.wheel.setAngle(0);
+					}
+					GearSet.prototype.update = function() {
+						if (this.pinion.toothCount <= 0 || this.wheel.toothCount <= 0 || this.module <= 0) {
+							// TODO: set all outputs to zero
+						}
+						else {
+							this.addendumFactor = this._calcAddendumFactor(this.wheel.toothCount, this.pinion.toothCount);
+							this.practicalAddendumFactor = 0.95 * this.addendumFactor;
+							this.gearRatio = this.wheel.toothCount / this.pinion.toothCount;
+
+							this.circularPitch = this.module * Math.PI;
+						}
+
+						this.wheel.update1();
+						this.pinion.update1();
+						this.wheel.update2();
+						this.pinion.update2();
+						this.wheelPinionDistance = (this.wheel.pitchDiameter + this.pinion.pitchDiameter) / 2.0;
+					}
+					GearSet.prototype._calcAddendumFactor = function() {
+						var beta = 0.0;
+						var theta = 1.0 ;
+						var thetaNew = 0.0 ;
+						var R = this.wheel.toothCount / this.pinion.toothCount; // gear ratio
+						while (Math.abs(thetaNew - theta) > c_ErrorLimit)
+						{
+							theta = thetaNew;
+							beta = Math.atan2(Math.sin(theta), (1.0 + 2 * R - Math.cos(theta))) ;
+							thetaNew = Math.PI/this.pinion.toothCount + 2 * R * beta ;	
+						}
+
+						theta = thetaNew;
+
+						k = 1.0 + 2 * R;
+
+						// addendum factor af
+						addendumFactor = this.pinion.toothCount / 4.0 * (1.0 - k + Math.sqrt( 1.0 + k * k - 2.0 * k * Math.cos(theta)) );
+						return addendumFactor;
+					}
+					GearSet.prototype.createSVG = function() {
+						this.wheel.createSVG();
+						this.pinion.createSVG();
+					}
+
+					return GearSet;
+				})();
+
+				var wheel = new Wheel({
+					toothCount: 30,
+					centerHoleDiameter: 4
+				});
+				
+				var pinion = new Pinion({
+					toothCount: 6,
+					centerHoleDiameter: 4
+				});
+				
+				var gearSet = new GearSet(
+					wheel,
+					pinion,
+					{
+						module: 4,
+						//wheelPinionDistance: 94.8,
+						showHelperLines: true,
+						//customSlop: 1,
+						//showHelperLines: false
+					}
+				);
+
+				var wheelDecoration = new CircularHolesDecoration(wheel);
+				
+				gearSet.createSVG();
+				wheel.setAngle(0);
+
+				var border = 5;
+				var height = 2 * Math.max(wheel.outerRadius, pinion.outerRadius) + 2 * border;
+				var width = wheel.outerRadius + pinion.outerRadius + gearSet.wheelPinionDistance + 2 * border;
+				//var width = height;
+				
+				var sizeConfig = {
+					width: "{0}mm".format(width),
+					height: "{0}mm".format(height),
+					viewBox: "{0} {1} {2} {3}".format(-width/2, -height/2, width, height)
+				};
+					
+				svg.configure(sizeConfig);
+				
+				wheel.setCenter([(border + wheel.outerRadius) - width / 2, 0]);
+				pinion.setCenter([(border + wheel.outerRadius + gearSet.wheelPinionDistance) - width / 2, 0]);
+
+				
+				//svg.configure(gear, {transform: 'translate(-10,20)'});
+				var xml = svg.toSVG();
+				$('#result').val(xml);
+				
+				// based on code from Andreas K򢥲le (http://stackoverflow.com/questions/10120975/how-to-save-an-svg-generated-by-raphael)
+				var anchor = document.getElementById('download');
+				anchor.innerHTML = "Download SVG";
+				anchor.download = 'involute.svg';
+				anchor.type = 'image/svg+xml';
+				
+				// see Eric Bidelman: http://updates.html5rocks.com/2012/06/Don-t-Build-Blobs-Construct-Them
+				var blob = new Blob([xml], {type: 'image/svg+xml'});
+				anchor.href = (window.URL || webkitURL).createObjectURL(blob);
+				//a.click();
+				
+				//animate();
+				
+				function animate() {
+					var angle = 0;
+					var rotationAnglePerSec = 2;
+					var lastFrame = +new Date; // return milliseconds (for explanation see http://stackoverflow.com/questions/9430357/please-explain-why-and-how-new-date-works-as-workaround-for-date-now-in)
+					setInterval(
+						function() {
+							var now = +new Date;
+							var deltaT = now - lastFrame;
+							lastFrame = now;
+							
+							angle += rotationAnglePerSec * deltaT / 1000;
+							wheel.setAngle(angle);
+						},
+						50
+					);
+				}
+
+			})
+		})(jQuery);
+</script>
+	</head>
+	<body>
+		<p><div id="svg_container" ></div></p>
+		<p><textarea id="result" cols="100" rows="2"></textarea></p>
+		<p><a id="download">test</a></p>
+	</body>
+</html>

@@ -1,0 +1,356 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" >
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+	<title>Involute Gear Builder</title>
+	<meta name="description" content="Involute gear builder with SVG output. Based on GPL licensed code from GregFrost (see http://www.thingiverse.com/thing:3575) and hence also licensed under the General Public License (GPL). Copyright 2012 Dr. Rainer Hessmer">
+	<meta name="author" content="Dr. Rainer Hessmer">
+	<style type="text/css">
+		@import ".lib/css/jquery.svg.css";
+	</style>
+
+	<!--script type="text/javascript" src="//ajax.googleapis.com/ajax/libs/jquery/1.8.2/jquery.min.js"></script-->
+	<script type="text/javascript" src="./lib/js/jquery-1.8.3.min.js"></script>
+	<script type="text/javascript" src="./lib/js/jquery.svg.js"></script>
+
+	<script type="text/javascript">
+		(function ($) {
+			$(document).ready(function () {
+			
+				// string.format function like in .Net (see http://stackoverflow.com/questions/610406/javascript-equivalent-to-printf-string-format/4673436#4673436)
+				String.prototype.format = function() {
+					var args = arguments;
+					return this.replace(/{(\d+)}/g, function(match, number) { 
+						return typeof args[number] != 'undefined'
+							? args[number]
+							: match
+						;
+					});
+				};
+
+				$('#svg_container').svg();
+				var svg = $('#svg_container').svg('get');
+				//svg.configure({width: '400mm', height: '300mm', viewBox: '-200 -150 400 300'}, true);
+				svg.configure({style: "border: 1px solid #484;"});
+
+				var helperLinesStyle = {
+					fill: 'none', 
+					stroke: 'blue',
+					'stroke-width': 0.1
+				};
+
+				var regularLinesStyle = {
+					fill: 'none', 
+					stroke: 'black',
+					'stroke-width': 0.1
+				};
+				
+				// Gear class
+				function InvoluteGear(options)
+				{
+					var options = options || {};
+
+					this.numberOfTeeth = options.numberOfTeeth || 15;
+					this.circularPitch = options.circularPitch;    // Arc distance along a specified pitch circle or pitch line between corresponding profiles of adjacent teeth.
+					this.diametralPitch = options.diametralPitch;  // Ratio of the number of teeth to the standard pitch diameter in inches.
+					this.pressureAngle = options.pressureAngle || 20; // Most common stock gears have a 20° pressure angle, with 14½° and 25° pressure angle gears being much less
+					// common. Increasing the pressure angle increases the width of the base of the gear tooth, leading to greater strength and load carrying capacity. Decreasing
+					// the pressure angle provides lower backlash, smoother operation and less sensitivity to manufacturing errors. (reference: http://en.wikipedia.org/wiki/Involute_gear)
+
+					this.clearance = options.clearance || 0;
+					this.boreDiameter = options.boreDiameter || 0;
+					//var circles = options.circles || 0;
+					this.backlash = options.backlash || 0;
+					this.involuteFacetsCount = options.involuteFacetsCount || 5;
+					this.showHelperLines = options.showHelperLines;
+
+					if (!(this.circularPitch || this.diametralPitch)) {
+						throw "gear module needs either a diametralPitch or circularPitch";
+					}
+
+					this._center = [0,0]; // center of the gear
+					this._angle = 0; // angle in degrees of the complete gear (changes during rotation animation)
+					
+					//Convert diametrial pitch to our native circular pitch
+					this.circularPitch = this.circularPitch ? this.circularPitch : 180 / this.diametralPitch;
+
+					// Pitch diameter: Diameter of pitch circle.
+					this.pitchDiameter = this.numberOfTeeth * this.circularPitch / 180;
+					this.pitchRadius = this.pitchDiameter / 2;
+					//alert("Teeth:", numberOfTeeth, " Pitch radius:", pitchRadius);
+
+					// Base Circle
+					this.baseRadius = this.pitchRadius * Math.cos(this.pressureAngle * Math.PI / 180);
+
+					// Diametrial pitch: Number of teeth per unit length.
+					this.pitchDiametrial = this.numberOfTeeth / this.pitchDiameter;
+
+					// Addendum: Radial distance from pitch circle to outside circle.
+					this.addendum = 1 / this.pitchDiametrial;
+
+					//Outer Circle
+					this.outerRadius = this.pitchRadius + this.addendum;
+
+					// Dedendum: Radial distance from pitch circle to root diameter
+					this.dedendum = this.addendum + this.clearance;
+
+					// Root diameter: Diameter of bottom of tooth spaces.
+					this.rootRadius = this.pitchRadius - this.dedendum;
+					this.backlashAngleRad = this.backlash / this.pitchRadius;
+					this.halfThickAngleRad = (2 * Math.PI / this.numberOfTeeth - this.backlashAngleRad) / 4;
+					
+					this._createSVG();
+				}		
+				InvoluteGear.prototype.getCenter = function() {
+					return this._center;
+				}
+				InvoluteGear.prototype.setCenter = function(newCenter) {
+					this._center = newCenter;
+					this._updateSvgConfig();
+				}
+				InvoluteGear.prototype.getAngle = function() {
+					return this._angle;
+				}
+				InvoluteGear.prototype.setAngle = function(newAngle) {
+					this._setAngleNoSideEffect(newAngle)
+					if (this.connectedGear != null) {
+						// we need to turn the connected gear as well
+						var ratio = this.pitchRadius / this.connectedGear.pitchRadius;
+						// we need an angle offset of half a tooth for the two gears to mesh
+						var offset = 180 / this.connectedGear.numberOfTeeth;
+						this.connectedGear._setAngleNoSideEffect(offset - newAngle * ratio);
+					}
+				}
+				InvoluteGear.prototype._setAngleNoSideEffect = function(newAngle) {
+					// does not call into a connected gear and hence does not run the risk of an infinite loop
+					this._angle = newAngle;
+					this._updateSvgConfig();
+				}
+				InvoluteGear.prototype._updateSvgConfig = function() {
+					svg.configure(this.gearGroup, {transform: "rotate({0}, {1}, {2}) translate({1},{2})".format(this._angle, this._center[0], this._center[1])});
+				}
+				InvoluteGear.prototype._createSVG = function()
+				{
+					this.gearGroup = svg.group();
+					if (this.showHelperLines) {
+						var helperLinesGroup = svg.group(this.gearGroup, helperLinesStyle);
+						svg.circle(helperLinesGroup, 0, 0, this.outerRadius);
+						svg.circle(helperLinesGroup, 0, 0, this.rootRadius);
+						
+						var length = 5;
+						svg.line(helperLinesGroup, -length, 0, length, 0);
+						svg.line(helperLinesGroup, 0, -length, 0, length);
+					}
+					
+					var gearToothPoints = this._calculateGearToothPoints();
+					
+					var gearPoints = [];
+					var deltaRad = -2 * Math.PI / this.numberOfTeeth;
+					
+					gearPoints.push(gearToothPoints);
+					for(var i = 1; i < this.numberOfTeeth; i++) {
+						var rotationAngleRad = i * deltaRad;
+						gearPoints.push(rotatePoints(rotationAngleRad, gearToothPoints));
+					}
+					
+					var gearPath = svg.polygon(this.gearGroup, gearPoints, regularLinesStyle);
+				}
+				InvoluteGear.prototype._calculateGearToothPoints = function() {
+					var minRadius = Math.max(this.baseRadius, this.rootRadius); // radius of the beginning of the involute
+
+					var pitchPoint = involute(this.baseRadius, involuteIntersectAngleRad(this.baseRadius, this.pitchRadius));
+					var pitchAngleRad = Math.atan2(pitchPoint[1], pitchPoint[0]);
+					var centerAngleRad = pitchAngleRad + this.halfThickAngleRad;
+
+					var startAngleRad = involuteIntersectAngleRad(this.baseRadius, minRadius);
+					var stopAngleRad = involuteIntersectAngleRad(this.baseRadius, this.outerRadius);
+					var deltaRad = (stopAngleRad - startAngleRad) / this.involuteFacetsCount;
+
+					var points = [];
+					for (var i = 0; i < this.involuteFacetsCount + 1; i++) {
+						var point = involute(this.baseRadius, startAngleRad + deltaRad * i);
+
+						var leftSidePoint = rotatePoint(centerAngleRad, point);
+						points.push(leftSidePoint);
+					}
+					// we mirror the calculate side to create the second face of the tooth
+					for(var i = 0; i < this.involuteFacetsCount + 1; i++) {
+						var leftSidePoint = points[this.involuteFacetsCount - i];
+						var rightSidePoint = mirrorPoint(leftSidePoint);
+						points.push(rightSidePoint);
+					}
+					
+					// finally we add the straight lines from the root radius to the beginning of the involute
+					var endFirstStraightSegment = points[0];
+					var angleRad = Math.atan2(endFirstStraightSegment[1], endFirstStraightSegment[0]);
+					
+					var startFirstStraightSegment = [this.rootRadius * Math.cos(angleRad), this.rootRadius * Math.sin(angleRad)];
+					var startSecondStraightSegement = mirrorPoint(startFirstStraightSegment);
+					
+					var gearToothPoints = [startFirstStraightSegment].concat(points, [startSecondStraightSegement]);
+					return gearToothPoints;
+				}
+
+				// Mathematical Helper Functions
+
+				// Finds the angle of the involute about the base radius at the given distance (radius) from it's center.
+				//source: http://www.mathhelpforum.com/math-help/geometry/136011-circle-involute-solving-y-any-given-x.html
+				function involuteIntersectAngleRad(baseRadius, radius) {
+					return Math.sqrt(Math.pow(radius / baseRadius, 2) - 1);
+				}
+
+				// Calculate the involute position for a given base radius and involute angle.
+				function rotatedInvolute(rotateRad, baseRadius, involuteAngleRad) {
+					return [
+						Math.cos(rotateRad) * involute(baseRadius, involuteAngleRad)[0] + Math.sin(rotateRad) * involute(baseRadius, involuteAngleRad)[1],
+						Math.cos(rotateRad) * involute(baseRadius, involuteAngleRad)[1] - Math.sin(rotateRad) * involute(baseRadius, involuteAngleRad)[0]
+					];
+				}
+
+				function mirrorPoint(point) { 
+					return [
+						point[0],
+						-point[1]
+					];
+				}
+
+				function rotatePoint(rotateRad, point) {
+					var cos = Math.cos(rotateRad);
+					var sin = Math.sin(rotateRad);
+					return [
+						cos * point[0] + sin * point[1],
+						cos * point[1] - sin * point[0]
+					]
+				};
+
+				function rotatePoints(rotateRad, points) {
+					var rotatedPoints = [];
+					var cos = Math.cos(rotateRad);
+					var sin = Math.sin(rotateRad);
+					for(var i = 0; i < points.length; i++) {
+						rotatedPoints.push(
+							[
+								cos * points[i][0] + sin * points[i][1],
+								cos * points[i][1] - sin * points[i][0]
+							]
+						);
+					}
+					return rotatedPoints;
+				};
+
+				function involute(baseRadius, involuteAngleRad) {
+					return [
+						baseRadius * (Math.cos(involuteAngleRad) + involuteAngleRad * Math.sin(involuteAngleRad)),
+						baseRadius * (Math.sin(involuteAngleRad) - involuteAngleRad * Math.cos(involuteAngleRad)),
+					]
+				};
+				
+				// class GearSet
+				function GearSet(gear1, gear2) {
+					this.gear1 = gear1;
+					gear1.connectedGear = gear2;
+					this.gear2 = gear2;
+					gear2.connectedGear = gear1;
+					// in order for the two gears to mesh we need to turn the second one by 'half a tooth'
+					this.gear1.setAngle(0);
+				}
+				GearSet.prototype.getGearsDistance = function()
+				{
+					return this.gear1.pitchRadius + this.gear2.pitchRadius;
+				}
+				GearSet.prototype.getGearRatio = function()
+				{
+					return this.gear1.pitchRadius / this.gear2.pitchRadius;
+				}
+
+				var circularPitch = 700;
+				var pressureAngle = 14.5;
+				var clearance = 0;
+				var backlash = 0;
+				var showHelperLines = true;
+				var involuteFacetsCount = 5;
+
+				var gear1 = new InvoluteGear({
+					numberOfTeeth: 30,
+					circularPitch: circularPitch,
+					pressureAngle: pressureAngle,
+					clearance: clearance,
+					backlash: backlash,
+					showHelperLines: showHelperLines,
+					involuteFacetsCount: involuteFacetsCount
+				});
+
+				var gear2 = new InvoluteGear({
+					numberOfTeeth: 8,
+					circularPitch: circularPitch,
+					clearance: clearance,
+					pressureAngle: pressureAngle,
+					backlash: backlash,
+					showHelperLines: showHelperLines,
+					involuteFacetsCount: involuteFacetsCount
+				});
+				
+				var gearSet = new GearSet(gear1, gear2);
+				
+				//gear1.setCenter([-10,0]);
+
+				var border = 5;
+				var width = gear1.outerRadius + gear2.outerRadius + gearSet.getGearsDistance() + 2 * border;
+				var height = 2 * Math.max(gear1.outerRadius, gear2.outerRadius) + 2 * border;
+				
+				var sizeConfig = {
+					width: "{0}mm".format(width),
+					height: "{0}mm".format(height),
+					viewBox: "{0} {1} {2} {3}".format(-width/2, -height/2, width, height)
+				};
+					
+				svg.configure(sizeConfig);
+				
+				gear1.setCenter([(border + gear1.outerRadius) - width / 2, 0]);
+				gear2.setCenter([(border + gear1.outerRadius + gearSet.getGearsDistance()) - width / 2, 0]);
+
+				
+				//svg.configure(gear, {transform: 'translate(-10,20)'});
+				var xml = svg.toSVG();
+				$('#result').val(xml);
+				
+				// based on code from Andreas K򢥲le (http://stackoverflow.com/questions/10120975/how-to-save-an-svg-generated-by-raphael)
+				var anchor = document.getElementById('download');
+				anchor.innerHTML = "Download SVG";
+				anchor.download = 'involute.svg';
+				anchor.type = 'image/svg+xml';
+				
+				// see Eric Bidelman: http://updates.html5rocks.com/2012/06/Don-t-Build-Blobs-Construct-Them
+				var blob = new Blob([xml], {type: 'image/svg+xml'});
+				anchor.href = (window.URL || webkitURL).createObjectURL(blob);
+				//a.click();
+				
+				animate();
+				
+				function animate() {
+					var angle = 0;
+					var rotationAnglePerSec = 2;
+					var lastFrame = +new Date; // return milliseconds (for explanation see http://stackoverflow.com/questions/9430357/please-explain-why-and-how-new-date-works-as-workaround-for-date-now-in)
+					setInterval(
+						function() {
+							var now = +new Date;
+							var deltaT = now - lastFrame;
+							lastFrame = now;
+							
+							angle += rotationAnglePerSec * deltaT / 1000;
+							gear1.setAngle(angle);
+						},
+						50
+					);
+				}
+
+			})
+		})(jQuery);
+</script>
+	</head>
+	<body>
+		<p><div id="svg_container" ></div></p>
+		<p><textarea id="result" cols="100" rows="2"></textarea></p>
+		<p><a id="download">test</a></p>
+	</body>
+</html>
