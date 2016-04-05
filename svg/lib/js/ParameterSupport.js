@@ -1,7 +1,7 @@
 var ParameterSupport;
 (function (ParameterSupport) {
 
-  // Adopted openjscad.js and slightly enhanced to support calculated parameters that the user cannot modify
+  // Adopted from openjscad.js and slightly enhanced to support calculated parameters that the user cannot modify
   function createParamControls(parameterDefinitions, parametersDiv) {
     var parametersTable = document.createElement("table");
     parametersTable.className = "parameterstable";

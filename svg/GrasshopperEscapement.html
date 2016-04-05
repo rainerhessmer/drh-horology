@@ -126,14 +126,15 @@
         { name: 'R2', caption: 'R2: Distance pallet arm axis to crutch pivot axis', type: 'float', initial: 100 },
         { name: 'N', caption: 'N: N + 0.5 is pallet span in mumber of teeth', type: 'int', initial: 9 },
         { name: 'nsf', caption: 'nsf: Nib shortening factor (0.9 ... 1)', type: 'float', initial: 0.9 },
-        { name: 'theta', caption: 'theta: Pendulum arc length (degree)', type: 'float', isCalculated: true },
-        { name: 'AOB', caption: 'AOB: Pallet span angle (degree)', type: 'float', isCalculated: true },
-        { name: 'BF', caption: 'BF: Upper limit for R2', type: 'float', isCalculated: true },
+        { name: 'palletEngagement', caption: 'Which pallet arm to draw engaged', type: 'choice', values: ['ENTRY', 'EXIT'], captions: ['Entry', 'Exit'], initial: 'ENTRY'},
+        { name: 'theta', caption: 'theta: Pendulum arc length (degree)', type: 'float', initial: 0, isCalculated: true },
+        { name: 'AOB', caption: 'AOB: Pallet span angle (degree)', type: 'float', initial: 0, isCalculated: true },
+        { name: 'BF', caption: 'BF: Upper limit for R2', type: 'float', initial: 0, isCalculated: true },
         { name: 'GO', caption: 'GO: Center distance', type: 'float', isCalculated: true },
-        { name: 'AH', caption: 'AH: Entry pallet arm length', type: 'float', isCalculated: true },
-        { name: 'AQ', caption: 'AQ: Entry pallet nib length', type: 'float', isCalculated: true },
-        { name: 'BJ', caption: 'BJ: Exit pallet arm length', type: 'float', isCalculated: true },
-        { name: 'BR', caption: 'BR: Exit pallet nib length', type: 'float', isCalculated: true },
+        { name: 'AH', caption: 'AH: Entry pallet arm length', type: 'float', initial: 0, isCalculated: true },
+        { name: 'AQ', caption: 'AQ: Entry pallet nib length', type: 'float', initial: 0, isCalculated: true },
+        { name: 'BJ', caption: 'BJ: Exit pallet arm length', type: 'float', initial: 0, isCalculated: true },
+        { name: 'BR', caption: 'BR: Exit pallet nib length', type: 'float', initial: 0, isCalculated: true },
       ];
     }
 
@@ -175,9 +176,9 @@
         this._calcAnchorPoints();
 
         this.crankArm = new CrankArm(this.H, this.G, this.J);
-        this.entryPalletArm = new EntryPalletArm(this.H, this.A, this.AH, this.Q, this.AAgainstStop);
-        this.exitPalletArm = new ExitPalletArm(this.J, this.B, this.BJ, this.R, this.BAgainstStop);
-        this.escapeWheel = new EscapeWheel(this.R1, this.R1 - this.AQ, this.Z, this.gamma, this.rotationAngleRad);
+        this.entryPalletArm = new EntryPalletArm(this.H, this.A, this.AAgainstStop, this.AH, this.Q, this.QAgainstStop, this.palletEngagement == 'ENTRY');
+        this.exitPalletArm = new ExitPalletArm(this.J, this.B, this.BAgainstStop, this.BJ, this.R, this.RAgainstStop, this.palletEngagement == 'EXIT');
+        this.escapeWheel = new EscapeWheel(this.R1, this.R1 - this.AQ, this.Z, this.gamma, this.rotationAngleRad, this.palletEngagement);
       }
 
       Escapement.prototype._calcAnchorPoints = function() {
@@ -206,20 +207,24 @@
         var reducedAngleRad = this.nsf * this.thetaRad;
         var Q = { x: -this.R1 + this.AH * Math.sin(reducedAngleRad), y: this.AH - this.AH * Math.cos(reducedAngleRad) };
         var AAgainstStop = { x: -this.R1 - this.AH * Math.sin(this.thetaRad), y: this.AH - this.AH * Math.cos(this.thetaRad) };
+        var QAgainstStop = { x: -this.R1 + this.AH * Math.sin(reducedAngleRad - this.thetaRad), y: this.AH - this.AH * Math.cos(reducedAngleRad - this.thetaRad) };
 
         // Exit pallet nib end point (JB rotated around B by theta)
         // First we pretend JB is vertical, then we rotate the resulting point.
         // Depending on the number of teeth Z the exit pallet arm might point to the right (regular orientation;
-        // away from the the entry pallet arm typical orientation) or left (i.e., towards the entry pallet arm).
+        // away from the the entry pallet arm) or left (i.e., towards the entry pallet arm).
         // The latter occurs for small values of Z. The orientation defines in what direction the nib points.
         var sign = utilities._isLeft(G, J, B) ? -1 : +1; 
-        var delta = { x: sign * this.BJ * Math.sin(reducedAngleRad), y: -this.BJ * Math.cos(reducedAngleRad) };
-        var deltaRotated = new Rotation(Math.PI - 2 * this.alphaRad).rotate(delta);
-        var R = { x: J.x + deltaRotated.x, y: J.y + deltaRotated.y };
+        var deltaR = { x: sign * this.BJ * Math.sin(reducedAngleRad), y: -this.BJ * Math.cos(reducedAngleRad) };
+        var deltaRRotated = new Rotation(Math.PI - 2 * this.alphaRad).rotate(deltaR);
+        var R = { x: J.x + deltaRRotated.x, y: J.y + deltaRRotated.y };
+        var deltaRAgainstStop = { x: sign * this.BJ * Math.sin(reducedAngleRad - this.thetaRad), y: -this.BJ * Math.cos(reducedAngleRad - this.thetaRad) };
+        var deltaRAgainstStopRotated = new Rotation(Math.PI - 2 * this.alphaRad).rotate(deltaRAgainstStop);
+        var RAgainstStop = { x: J.x + deltaRAgainstStopRotated.x, y: J.y + deltaRAgainstStopRotated.y };
 
-        var deltaAgainstStop = { x: -sign * this.BJ * Math.sin(this.thetaRad), y: -this.BJ * Math.cos(this.thetaRad) };
-        var deltaAgainstStopRotated = new Rotation(Math.PI - 2 * this.alphaRad).rotate(deltaAgainstStop);
-        var BAgainstStop = { x: J.x + deltaAgainstStopRotated.x, y: J.y + deltaAgainstStopRotated.y };
+        var deltaBAgainstStop = { x: -sign * this.BJ * Math.sin(this.thetaRad), y: -this.BJ * Math.cos(this.thetaRad) };
+        var deltaBAgainstStopRotated = new Rotation(Math.PI - 2 * this.alphaRad).rotate(deltaBAgainstStop);
+        var BAgainstStop = { x: J.x + deltaBAgainstStopRotated.x, y: J.y + deltaBAgainstStopRotated.y };
 
         // To get OG vertical we need to rotate everything around the center of the escape wheel.
         // Rothation angle:
@@ -236,8 +241,10 @@
         this.G = rotation.rotate(G);
         this.Q = rotation.rotate(Q);
         this.AAgainstStop = rotation.rotate(AAgainstStop);
+        this.QAgainstStop = rotation.rotate(QAgainstStop);
         this.R = rotation.rotate(R);
         this.BAgainstStop = rotation.rotate(BAgainstStop);
+        this.RAgainstStop = rotation.rotate(RAgainstStop);
       }
 
       Escapement.prototype.createGraphics = function(parent) {
@@ -267,8 +274,10 @@
           this.G,
           this.Q,
           this.AAgainstStop,
+          this.QAgainstStop,
           this.R,
           this.BAgainstStop,
+          this.RAgainstStop,
         ];
 
         utilities._drawCrosses(anchorPointsGroup, points, halfLength);
@@ -302,12 +311,14 @@
 
     // EntryPalletArm class
     var EntryPalletArm = (function () {
-      function EntryPalletArm(H, A, AH, Q, QAgainstStop) {
+      function EntryPalletArm(H, A, AAgainstStop, AH, Q, QAgainstStop, isPalletEngaged) {
         this.H = H;
         this.A = A;
+        this.AAgainstStop = AAgainstStop;
         this.AH = AH;
         this.Q = Q;
         this.QAgainstStop = QAgainstStop;
+        this.isPalletEngaged = isPalletEngaged; // If true, the pallet is drawn meshed with the escape wheel tooth.
       }
 
       EntryPalletArm.prototype.createGraphics = function(parent) {
@@ -316,16 +327,18 @@
 
         group.stroke(regularLinesStyle).fill('none');
 
+        var A = this.isPalletEngaged ? this.A : this.AAgainstStop;
+        var Q = this.isPalletEngaged ? this.Q : this.QAgainstStop;
         var path = group.path();
         path.M(this.H);
-        path.L(this.A);
-        path.A(this.AH, this.AH, 0, 0, 1, this.Q);
+        path.L(A);
+        path.A(this.AH, this.AH, 0, 0, 1, Q);
       }
 
       EntryPalletArm.prototype._insertHelperLines = function(parent) {
         var helperLinesGroup = parent.group();
         helperLinesGroup.stroke(helperLinesStyle).fill('none');
-        helperLinesGroup.line(this.H.x, this.H.y, this.QAgainstStop.x, this.QAgainstStop.y)
+        helperLinesGroup.line(this.H.x, this.H.y, this.AAgainstStop.x, this.AAgainstStop.y)
      }
 
       return EntryPalletArm;
@@ -333,12 +346,14 @@
 
     // ExitPalletArm class
     var ExitPalletArm = (function () {
-      function ExitPalletArm(J, B, BJ, R, RAgainstStop) {
+      function ExitPalletArm(J, B, BAgainstStop, BJ, R, RAgainstStop, isPalletEngaged) {
         this.J = J;
         this.B = B;
+        this.BAgainstStop = BAgainstStop;
         this.BJ = BJ;
         this.R = R;
         this.RAgainstStop = RAgainstStop;
+        this.isPalletEngaged = isPalletEngaged; // If true, the pallet is drawn meshed with the escape wheel tooth.
       }
 
       ExitPalletArm.prototype.createGraphics = function(parent) {
@@ -347,18 +362,20 @@
 
         group.stroke(regularLinesStyle).fill('none');
 
+        var B = this.isPalletEngaged ? this.B : this.BAgainstStop;
+        var R = this.isPalletEngaged ? this.R : this.RAgainstStop;
         var path = group.path();
         path.M(this.J);
-        path.L(this.B);
+        path.L(B);
 
-        var sweepFlag = utilities._isLeft(this.J, this.B, this.R) ? 1 : 0;
-        path.A(this.BJ, this.BJ, 0, 0, sweepFlag, this.R);
+        var sweepFlag = utilities._isLeft(this.J, B, R) ? 1 : 0;
+        path.A(this.BJ, this.BJ, 0, 0, sweepFlag, R);
       }
 
       ExitPalletArm.prototype._insertHelperLines = function(parent) {
         var helperLinesGroup = parent.group();
         helperLinesGroup.stroke(helperLinesStyle).fill('none');
-        helperLinesGroup.line(this.J.x, this.J.y, this.RAgainstStop.x, this.RAgainstStop.y)
+        helperLinesGroup.line(this.J.x, this.J.y, this.BAgainstStop.x, this.BAgainstStop.y)
       }
 
       return ExitPalletArm;
@@ -366,12 +383,13 @@
 
     // EscapeWheel class
     var EscapeWheel = (function () {
-      function EscapeWheel(outerRadius, innerRadius, toothCount, toothUnderCutAngle, entryPalletArmAngleRad) {
+      function EscapeWheel(outerRadius, innerRadius, toothCount, toothUnderCutAngle, entryPalletArmAngleRad, palletEngagement) {
         this.outerRadius = outerRadius;
         this.innerRadius = innerRadius;
         this.toothCount = toothCount;
         this.toothUnderCutAngleRad = toothUnderCutAngle * Math.PI / 180;
         this.entryPalletArmAngleRad = entryPalletArmAngleRad;
+        this.palletEngagement = palletEngagement; // indicates whether the escapew wheel should be rotated so that the entry or exit pallet are engaged.
       }
       EscapeWheel.prototype.createGraphics = function(parent) {
         var escapeWheelGroup = parent.group();
@@ -395,9 +413,13 @@
         var path = parent.path().stroke(regularLinesStyle).fill('none');
 
         var tooth = new Tooth(this);
-        // We want the first tooth to mesh with the entry pallet arm nib
-        var startAngleRad = Math.PI / 2 + this.entryPalletArmAngleRad;
         var angleRadPerTooth = 2 * Math.PI / this.toothCount;
+        // We start with the first tooth to meshing with the entry pallet arm nib.
+        var startAngleRad = Math.PI / 2 + this.entryPalletArmAngleRad;
+        if (this.palletEngagement == 'EXIT') {
+          // To mesh with the exit pallet we need to turn by a half tooth
+          startAngleRad += angleRadPerTooth/ 2;
+        }
         for (var i = 0; i < this.toothCount; i++) {
           var toothAngleRad = startAngleRad + angleRadPerTooth * i;
           rotation = new Rotation(toothAngleRad);
