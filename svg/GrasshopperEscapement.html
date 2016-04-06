@@ -51,13 +51,12 @@
       var drawingDiv = document.getElementById('drawing');
       var width = 800;
       var height = 800;
-      //drawingDiv.setAttribute("style","height:500px");
       drawingDiv.style.width = width + 'px';
       drawingDiv.style.height = height + 'px';
-      drawing = SVG('drawing'); //.size(width, height); //.size(800, 800); //.viewbox(0, 0, 800, 800); //.spof();
-      topGroup = drawing.group(); //.scale(1, -1).cx(400).cy(-400).group(); // flip y axis so that it points up
+      drawing = SVG('drawing');
+      topGroup = drawing.group();
       topGroup.panZoom();
-      mainGroup = topGroup.group().scale(1, -1).cx(400).cy(-400).group();
+      mainGroup = topGroup.group().scale(1, 1).cx(width / 2).cy(height / 2).group();
 
       utilities = new Utilities();
       update();
@@ -74,11 +73,22 @@
       mainGroup.clear();
       escapement.createGraphics(mainGroup);
       
-      exportSvg();
+      exportSvg(escapement);
     }
 
-    function exportSvg() {
-      var exportedSVG = drawing.exportSvg({ whitespace: true });
+    function exportSvg(escapement) {
+      // For export we use a separate svg instance that is properly sized in mm.
+      // The viewbox is always in px. 1 mm = 3.543307 px (see https://mpetroff.net/2013/08/analysis-of-svg-units/)
+      var pxPerMillimeter = 3.543307;
+      // We leave some space around the escapement drawing.
+      var totalWidth = 1.1 * escapement.totalWidth;
+      var totalHeight = 1.1 * escapement.totalHeight;
+      var drawingForExport = SVG('drawingForExport')
+          .size(totalWidth + 'mm', totalHeight + 'mm')
+          .viewbox(-totalWidth / 2, -totalHeight, totalWidth, totalHeight); 
+      var topGroup = drawingForExport.group();
+      escapement.createGraphics(topGroup);
+      var exportedSVG = drawingForExport.exportSvg({ whitespace: true });
       document.getElementById("exportedSVG").value = exportedSVG;
 
       // based on code from Andreas Köberle (http://stackoverflow.com/questions/10120975/how-to-save-an-svg-generated-by-raphael)
@@ -179,6 +189,11 @@
         this.entryPalletArm = new EntryPalletArm(this.H, this.A, this.AAgainstStop, this.AH, this.Q, this.QAgainstStop, this.palletEngagement == 'ENTRY');
         this.exitPalletArm = new ExitPalletArm(this.J, this.B, this.BAgainstStop, this.BJ, this.R, this.RAgainstStop, this.palletEngagement == 'EXIT');
         this.escapeWheel = new EscapeWheel(this.R1, this.R1 - this.AQ, this.Z, this.gamma, this.rotationAngleRad, this.palletEngagement);
+
+        // Calculating the maximum dimensions required for the drawing
+        var maxDistanceFromYAxis = Math.max(this.R1, this.R2, Math.abs(this.AAgainstStop.x), Math.abs(this.BAgainstStop.x));
+        this.totalWidth = 2 * maxDistanceFromYAxis;
+        this.totalHeight = this.GO + this.R1 + this.R2;
       }
 
       Escapement.prototype._calcAnchorPoints = function() {
@@ -211,9 +226,9 @@
 
         // Exit pallet nib end point (JB rotated around B by theta)
         // First we pretend JB is vertical, then we rotate the resulting point.
-        // Depending on the number of teeth Z the exit pallet arm might point to the right (regular orientation;
+        // Depending on the number of teeth Z the exit pallet arm might point to the right (typical orientation;
         // away from the the entry pallet arm) or left (i.e., towards the entry pallet arm).
-        // The latter occurs for small values of Z. The orientation defines in what direction the nib points.
+        // The orientation defines what direction the nib points to.
         var sign = utilities._isLeft(G, J, B) ? -1 : +1; 
         var deltaR = { x: sign * this.BJ * Math.sin(reducedAngleRad), y: -this.BJ * Math.cos(reducedAngleRad) };
         var deltaRRotated = new Rotation(Math.PI - 2 * this.alphaRad).rotate(deltaR);
@@ -253,6 +268,15 @@
         this.entryPalletArm.createGraphics(parent);
         this.exitPalletArm.createGraphics(parent);
         this.escapeWheel.createGraphics(parent);
+
+        // The drawing is already centered horizontally but we still need to center it vertically.
+        // Currently the center of the escapewheel is at 0.0.
+        var deltaY = (this.R1 + this.GO + this.R2) / 2 - this.R1;
+        parent.y(-deltaY);
+
+        // Finally the y axis in the svg coordinate system points downwards. However we calcualted everything based on
+        // a y axis going upwards. So we need to mirror the drawing.
+        parent.scale(1, -1); 
       }
 
       Escapement.prototype._insertHelperLines = function(parent) {
@@ -540,6 +564,7 @@
     </div></p>
     <p><div id="drawing" class="svgdiv"></div></p>
     <p><a id="downloadSVG">place holder</a></p>
+    <div id="drawingForExport" style="display: none" ></div>
     <p><textarea id="exportedSVG" cols="100" rows="2"></textarea></p>
 
     <h2>License and Credits</h2>
