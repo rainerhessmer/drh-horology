@@ -375,7 +375,7 @@
       EntryPalletArm.prototype._insertHelperLines = function(parent) {
         var helperLinesGroup = parent.group();
         helperLinesGroup.stroke(helperLinesStyle).fill('none');
-        var endPoint = this.isPalletEngaged ? this.AAgainstStop : this.QAgainstStop;
+        var endPoint = this.isPalletEngaged ? this.AAgainstStop : this.A;
         helperLinesGroup.line(this.H.x, this.H.y, endPoint.x, endPoint.y)
      }
 
@@ -413,7 +413,7 @@
       ExitPalletArm.prototype._insertHelperLines = function(parent) {
         var helperLinesGroup = parent.group();
         helperLinesGroup.stroke(helperLinesStyle).fill('none');
-        var endPoint = this.isPalletEngaged ? this.BAgainstStop : this.RAgainstStop;
+        var endPoint = this.isPalletEngaged ? this.BAgainstStop : this.B;
         helperLinesGroup.line(this.J.x, this.J.y, endPoint.x, endPoint.y)
       }
 
