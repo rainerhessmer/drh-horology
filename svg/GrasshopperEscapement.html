@@ -39,6 +39,8 @@
   <script type="text/javascript" src="./lib/js/svg.pan-zoom.js"></script>
   <script type="text/javascript" src="./lib/js/ParameterSupport.js"></script>
   <script type="text/javascript">
+    var drawingWidth;
+    var drawingHeight;
     var drawing;
     var mainGroup;
     var parameterDefinitions;
@@ -49,14 +51,13 @@
       ParameterSupport.createParamControls(parameterDefinitions, document.getElementById("parameters"));
 
       var drawingDiv = document.getElementById('drawing');
-      var width = 800;
-      var height = 800;
-      drawingDiv.style.width = width + 'px';
-      drawingDiv.style.height = height + 'px';
+      drawingWidth = 800;
+      drawingHeight = 800;
+      drawingDiv.style.width = drawingWidth + 'px';
+      drawingDiv.style.height = drawingHeight + 'px';
+
       drawing = SVG('drawing');
-      topGroup = drawing.group();
-      topGroup.panZoom();
-      mainGroup = topGroup.group().scale(1, 1).cx(width / 2).cy(height / 2).group();
+
 
       utilities = new Utilities();
       update();
@@ -67,13 +68,25 @@
       ParameterSupport.injectFromUI(parameterDefinitions, escapement);
 
       escapement.update();
-
       ParameterSupport.writeToUI(parameterDefinitions, escapement);
-
-      mainGroup.clear();
-      escapement.createGraphics(mainGroup);
       
+      display(escapement);
       exportSvg(escapement);
+    }
+
+    function display(escapement) {
+      drawing.clear();
+      topGroup = drawing.group();
+      topGroup.panZoom();
+
+      // Scale to fit with some border around the escapement
+      var totalWidth = 1.1 * escapement.totalWidth;
+      var totalHeight = 1.1 * escapement.totalHeight;
+
+      var scalingFactor = Math.min(drawingWidth / totalWidth, drawingHeight / totalHeight);
+
+      mainGroup = topGroup.group().cx(drawingWidth / 2).cy(drawingHeight / 2).scale(scalingFactor, scalingFactor).group();
+      escapement.createGraphics(mainGroup);      
     }
 
     function exportSvg(escapement) {
@@ -362,7 +375,8 @@
       EntryPalletArm.prototype._insertHelperLines = function(parent) {
         var helperLinesGroup = parent.group();
         helperLinesGroup.stroke(helperLinesStyle).fill('none');
-        helperLinesGroup.line(this.H.x, this.H.y, this.AAgainstStop.x, this.AAgainstStop.y)
+        var endPoint = this.isPalletEngaged ? this.AAgainstStop : this.QAgainstStop;
+        helperLinesGroup.line(this.H.x, this.H.y, endPoint.x, endPoint.y)
      }
 
       return EntryPalletArm;
@@ -399,7 +413,8 @@
       ExitPalletArm.prototype._insertHelperLines = function(parent) {
         var helperLinesGroup = parent.group();
         helperLinesGroup.stroke(helperLinesStyle).fill('none');
-        helperLinesGroup.line(this.J.x, this.J.y, this.BAgainstStop.x, this.BAgainstStop.y)
+        var endPoint = this.isPalletEngaged ? this.BAgainstStop : this.RAgainstStop;
+        helperLinesGroup.line(this.J.x, this.J.y, endPoint.x, endPoint.y)
       }
 
       return ExitPalletArm;
