@@ -58,7 +58,6 @@
 
       drawing = SVG('drawing');
 
-
       utilities = new Utilities();
       update();
     }
@@ -548,7 +547,7 @@
       function Utilities() {
       }
 
-      // Determines whether point c is to the left of the line fro point a to point b
+      // Determines whether point c is to the left of the line from point a to point b
       // (based on the z component of the cross product of ab and az)
       Utilities.prototype._isLeft  = function(a, b, c) {
         return ((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)) > 0;
