@@ -113,6 +113,9 @@
       var gearSet = new GearSet();
       ParameterSupport.injectFromUI(parameterDefinitions, gearSet);
       gearSet.update();
+      if (!gearSet.isValid) {
+        return;
+      }
       ParameterSupport.writeToUI(parameterDefinitions, gearSet);
       
       display(gearSet);
@@ -177,6 +180,12 @@
       function GearSet() {
       }
       GearSet.prototype.update = function() {
+        this.isValid = this.circularPitch > this.lanternToothDiameter;
+        if (!this.isValid) {
+          alert("Tooth diameter must be less than circular pitch.");
+          return;
+        }
+
         this.lanternGear = new LanternGear(this.circularPitch, this.lanternToothCount, this.lanternToothDiameter, this.lanternHoleDiamater);
         this.matchingGear = new MatchingGear(this.circularPitch, this.matchingToothCount, this.lanternGear, this.backlash, this.matchingCenterHoleDiamater);
 
