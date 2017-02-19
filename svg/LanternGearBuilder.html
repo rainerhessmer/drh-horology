@@ -49,15 +49,15 @@
     var mainGroup;
     var parameterDefinitions;
     var utilities;
-    var defaultCicleSegmentCount = 360;
+    var defaultCicleSegmentCount = 180;
     var scaleOut = 10000;
 
     function getParameterDefinitions() {
       return [
-        { name: 'circularPitch', caption: 'Circular pitch (the circumference of the pitch circle divided by the number of teeth):', type: 'float', initial: 20 },
+        { name: 'circularPitch', caption: 'Circular pitch (the circumference of the pitch circle divided by the number of teeth):', type: 'float', initial: 10 },
         { name: 'lanternToothCount', caption: "Lantern gear tooth count:", type: 'int', initial: 20 },
         { name: 'lanternPitchDiameter', caption: 'Lantern gear pitch circle diameter', type: 'float', isCalculated: true },
-        { name: 'lanternToothDiameter', caption: "Lantern gear tooth diameter:", type: 'float', initial: 8 },
+        { name: 'lanternToothDiameter', caption: "Lantern gear tooth diameter:", type: 'float', initial: 4 },
         { name: 'lanternHoleDiamater', caption: "Lantern gear center hole diameter (0 for no hole):", type: 'float', initial: 4 },
         { name: 'matchingToothCount', caption: 'Matching gear tooth count:', type: 'int', initial: 5 },
         { name: 'matchingPitchDiameter', caption: 'Matching gear pitch circle diameter', type: 'float', isCalculated: true },
@@ -124,13 +124,13 @@
       topGroup.panZoom();
 
       // Scale to fit with some border around
-      var borderRatio = 0; // 0.05;
+      var borderRatio = 0.02;
       var border = borderRatio * Math.max(gearSet.width, gearSet.height); 
       var totalWidth = gearSet.width + 2 * border;
       var totalHeight = gearSet.height + 2 * border;
 
       var scalingFactor = Math.min(drawingWidth / totalWidth, drawingHeight / totalHeight);
-      mainGroup = topGroup.group().x(-gearSet.center.X).y(-gearSet.center.Y).scale(scalingFactor, scalingFactor);
+      mainGroup = topGroup.group().scale(scalingFactor, scalingFactor).x(-gearSet.center.X).y(-gearSet.center.Y);
       mainGroup.dx(drawingWidth / scalingFactor / 2);
       //mainGroup.dx(79.2);
       mainGroup.dy(drawingHeight / scalingFactor / 2);
@@ -192,7 +192,7 @@
         this.height = 2 * Math.max(this.lanternGear.maxRadius, this.matchingGear.maxRadius);
 
         this.center = {
-          X: (this.left + this.width) / 2,
+          X: this.left + this.width / 2,
           Y: 0
         };
 
@@ -258,7 +258,6 @@
             lower = middle;
           }
         }
-        //console.log("counter: " + counter);
 
         lanternGearStepAngle = -(upper.angle + lower.angle) / 2 / stepCount;
         var startAngle = upper.angle;
@@ -276,14 +275,15 @@
         this.matchingGear.toothCutoutCenters = toothCutoutCenters;
       }
       GearSet.prototype.createGraphics = function(parent) {
+        var crossMarkerLength = this.lanternToothDiameter * 1.1;
         if ((this.showOption & 1) > 0) {
           // show gear 1
-          this.lanternGear.createGraphics(parent);
+          this.lanternGear.createGraphics(parent, crossMarkerLength);
         }
         if ((this.showOption & 2) > 0) {
           // show gear 2
-          this.matchingGear.createGraphics(parent);
-        } 
+          this.matchingGear.createGraphics(parent, crossMarkerLength);
+        }
       }
       return GearSet;
     })();
@@ -308,15 +308,15 @@
           this.toothCenters.push(toothCenter);
         }
       }
-      LanternGear.prototype.createGraphics = function(parent) {
+      LanternGear.prototype.createGraphics = function(parent, crossMarkerLength) {
         var helperGroup = parent.group();
         helperGroup.stroke(helperLinesStyle).fill('none');
         // Pitch circle
         helperGroup.circle(2 * this.pitchRadius).cx(this.center.X).cy(this.center.Y);
 
-        utilities.drawCross(helperGroup, this.center, 5);
+        utilities.drawCross(helperGroup, this.center, crossMarkerLength);
         for (var i = 0; i < this.toothCenters.length; i++) {
-          utilities.drawCross(helperGroup, this.toothCenters[i], 5);
+          utilities.drawCross(helperGroup, this.toothCenters[i], crossMarkerLength);
         }
 
         drawRotatedTeeth = false;
@@ -428,12 +428,12 @@
           appendRotated(singleToothPath, this.center, rotationAngle, this.gearPath);
         }
       }
-      MatchingGear.prototype.createGraphics = function(parent) {
+      MatchingGear.prototype.createGraphics = function(parent, crossMarkerLength) {
         var helperGroup = parent.group();
         helperGroup.stroke(helperLinesStyle).fill('none');
 
         helperGroup.circle(2 * this.pitchRadius).cx(this.center.X).cy(this.center.Y);
-        utilities.drawCross(helperGroup, this.center, 5);
+        utilities.drawCross(helperGroup, this.center, crossMarkerLength);
 
         // Ray from center to half tooth
         //var endPoint1 = this.toothCutoutCenters[this.toothCutoutCenters.length - 1];
@@ -553,12 +553,13 @@
     var Utilities = (function () {
       function Utilities() {
       }
-      Utilities.prototype.drawCrosses = function(parent, points, halfLength) {
+      Utilities.prototype.drawCrosses = function(parent, points, length) {
         for (var i = 0; i < points.length; i++) {
-          this._drawCross(parent, points[i], halfLength);
+          this._drawCross(parent, points[i], length);
         }
       }
-      Utilities.prototype.drawCross = function(parent, point, halfLength) {
+      Utilities.prototype.drawCross = function(parent, point, length) {
+        var halfLength = length / 2;
         parent.line(point.X, point.Y - halfLength, point.X, point.Y + halfLength).stroke(markerLinesStyle);
         parent.line(point.X - halfLength, point.Y, point.X + halfLength, point.Y).stroke(markerLinesStyle);
       }
