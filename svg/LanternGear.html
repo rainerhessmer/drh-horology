@@ -18,6 +18,7 @@
       border-radius: 3px;
       background: LightGray ;
       padding: 10px;
+      width: 800px;
     }
     .parametersdiv {
       border: 1px solid black;
@@ -28,6 +29,7 @@
     }
     .svgdiv {
       border: 1px solid black;
+      padding: 10px;
       //width: 800px;
       //height: 800px;
     }
@@ -114,6 +116,7 @@
       ParameterSupport.writeToUI(parameterDefinitions, gearSet);
       
       display(gearSet);
+      exportSvg(gearSet);
     }
     function display(gearSet) {
       drawing.clear();
@@ -121,18 +124,54 @@
       topGroup.panZoom();
 
       // Scale to fit with some border around
-      var totalWidth = 1.05 * gearSet.width;
-      var totalHeight = 1.05 * gearSet.height;
+      var borderRatio = 0; // 0.05;
+      var border = borderRatio * Math.max(gearSet.width, gearSet.height); 
+      var totalWidth = gearSet.width + 2 * border;
+      var totalHeight = gearSet.height + 2 * border;
 
       var scalingFactor = Math.min(drawingWidth / totalWidth, drawingHeight / totalHeight);
-      mainGroup = topGroup.group().x(-gearSet.center.X).cy(-gearSet.center.Y).scale(scalingFactor, scalingFactor);
+      mainGroup = topGroup.group().x(-gearSet.center.X).y(-gearSet.center.Y).scale(scalingFactor, scalingFactor);
       mainGroup.dx(drawingWidth / scalingFactor / 2);
+      //mainGroup.dx(79.2);
       mainGroup.dy(drawingHeight / scalingFactor / 2);
+
+      console.log(drawingWidth / scalingFactor / 2);
+      console.log(gearSet.width / 2);
 
       mainGroup.stroke(regularLinesStyle).fill('none');
 
       gearSet.createGraphics(mainGroup);
     }
+
+    function exportSvg(gearSet) {
+      // For export we use a separate svg instance that is properly sized in mm.
+      // The viewbox is always in px. 1 mm = 3.543307 px (see https://mpetroff.net/2013/08/analysis-of-svg-units/)
+      var pxPerMillimeter = 3.543307;
+      // We leave some space around the escapement drawing.
+      var borderRatio = 0.05;
+      var border = borderRatio * Math.max(gearSet.width, gearSet.height); 
+      var totalWidth = gearSet.width + 2 * border;
+      var totalHeight = gearSet.height + 2 * border;
+      var drawingForExport = SVG('drawingForExport')
+          .size(totalWidth + 'mm', totalHeight + 'mm')
+          .viewbox(gearSet.left - border, gearSet.top - border, totalWidth, totalHeight); 
+      var topGroup = drawingForExport.group();
+
+      gearSet.createGraphics(topGroup);
+      var exportedSVG = drawingForExport.exportSvg({ whitespace: true });
+      document.getElementById("exportedSVG").value = exportedSVG;
+
+      // based on code from Andreas Köberle (http://stackoverflow.com/questions/10120975/how-to-save-an-svg-generated-by-raphael)
+      var anchor = document.getElementById('downloadSVG');
+      anchor.innerHTML = "Download SVG";
+      anchor.download = 'lantern_gear.svg';
+      anchor.type = 'image/svg+xml';
+      
+      // see Eric Bidelman: http://updates.html5rocks.com/2012/06/Don-t-Build-Blobs-Construct-Them
+      var blob = new Blob([exportedSVG], {type: 'image/svg+xml'});
+      anchor.href = (window.URL || webkitURL).createObjectURL(blob);
+    }
+
     // GearSet class
     var GearSet = (function () {
       function GearSet() {
@@ -146,11 +185,14 @@
 
         this.matchingGear.createGearPath();
 
+        this.left = -this.lanternGear.maxRadius;
+        this.top = -Math.max(this.lanternGear.maxRadius, this.matchingGear.maxRadius);
+
         this.width = this.lanternGear.maxRadius + this.lanternGear.pitchRadius + this.matchingGear.pitchRadius + this.matchingGear.maxRadius;
         this.height = 2 * Math.max(this.lanternGear.maxRadius, this.matchingGear.maxRadius);
 
         this.center = {
-          X: (this.lanternGear.center.X + this.width) / 2,
+          X: (this.left + this.width) / 2,
           Y: 0
         };
 
@@ -351,7 +393,7 @@
         var centerIndex = -1;
         for (var i = 0; i < lightenedPath.length; i++) {
           var toothCutoutCenter = lightenedPath[i];
-          console.log(JSON.stringify(toothCutoutCenter));
+          // console.log(JSON.stringify(toothCutoutCenter));
           if (scaledOutGearCenter.X == toothCutoutCenter.X && scaledOutGearCenter.Y == toothCutoutCenter.Y) {
             // This is the index of the point in the graph representing the center of the gear.
             centerIndex = i;
@@ -570,7 +612,7 @@
     <p><div id="drawing" class="svgdiv"></div></p>
     <p><a id="downloadSVG">place holder</a></p>
     <div id="drawingForExport" style="display: none" ></div>
-    <p><textarea id="exportedSVG" cols="100" rows="2"></textarea></p>
+    <p><textarea id="exportedSVG" rows="2"></textarea></p>
 
     <h2>License and Credits</h2>
     <ul>
