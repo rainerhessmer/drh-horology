@@ -1,0 +1,592 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" >
+<head>
+  <title>Grasshopper Escapement Builder</title>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+  <meta name="description" content="Grasshopper escapement builder with DXF output. Licensed under the MIT license (http://opensource.org/licenses/mit-license.php). Copyright 2017 Dr. Rainer Hessmer">
+  <meta name="author" content="Dr. Rainer Hessmer">
+  <style type="text/css">
+    body {
+      font: 14px/20px 'Helvetica Neue Light', HelveticaNeue-Light, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      max-width: 820px;
+      margin: 0 auto;
+      padding: 10px;
+    }
+    textarea {
+      font: 12px/20px Monaco, monospace;
+      border: 1px solid #CCC;
+      border-radius: 3px;
+      background: LightGray ;
+      padding: 10px;
+      width: 800px;
+    }
+    .parametersdiv {
+      border: 1px solid black;
+      -moz-border-radius: 5px;
+      -webkit-border-radius: 5px;
+      border-radius: 5px;
+      padding: 10px;
+    }
+    .svgdiv {
+      border: 1px solid black;
+      //width: 800px;
+      //height: 800px;
+    }
+  </style>
+
+  <script type="text/javascript" src="./lib/js/svg.js"></script>
+  <script type="text/javascript" src="./lib/js/svg.path.js"></script>
+  <script type="text/javascript" src="./lib/js/svg.export.js"></script>
+  <script type="text/javascript" src="./lib/js/svg.pan-zoom.js"></script>
+  <script type="text/javascript" src="./lib/js/ParameterSupport.js"></script>
+  <script type="text/javascript">
+    var drawingWidth;
+    var drawingHeight;
+    var drawing;
+    var mainGroup;
+    var parameterDefinitions;
+    var utilities;
+
+    function onload() {
+      parameterDefinitions = getParameterDefinitions();
+      ParameterSupport.createParamControls(parameterDefinitions, document.getElementById("parameters"));
+
+      var drawingDiv = document.getElementById('drawing');
+      drawingWidth = 800;
+      drawingHeight = 800;
+      drawingDiv.style.width = drawingWidth + 'px';
+      drawingDiv.style.height = drawingHeight + 'px';
+
+      drawing = SVG('drawing');
+
+      utilities = new Utilities();
+      update();
+    }
+
+    function update() {
+      var escapement = new Escapement();
+      ParameterSupport.injectFromUI(parameterDefinitions, escapement);
+
+      escapement.update();
+      ParameterSupport.writeToUI(parameterDefinitions, escapement);
+      
+      display(escapement);
+      exportSvg(escapement);
+    }
+
+    function display(escapement) {
+      drawing.clear();
+      topGroup = drawing.group();
+      topGroup.panZoom();
+
+      // Scale to fit with some border around the escapement
+      var totalWidth = 1.1 * escapement.totalWidth;
+      var totalHeight = 1.1 * escapement.totalHeight;
+
+      var scalingFactor = Math.min(drawingWidth / totalWidth, drawingHeight / totalHeight);
+
+      mainGroup = topGroup.group().cx(drawingWidth / 2).cy(drawingHeight / 2).scale(scalingFactor, scalingFactor).group();
+      escapement.createGraphics(mainGroup);      
+    }
+
+    function exportSvg(escapement) {
+      // For export we use a separate svg instance that is properly sized in mm.
+      // The viewbox is always in px. 1 mm = 3.543307 px (see https://mpetroff.net/2013/08/analysis-of-svg-units/)
+      var pxPerMillimeter = 3.543307;
+      // We leave some space around the escapement drawing.
+      var totalWidth = 1.1 * escapement.totalWidth;
+      var totalHeight = 1.1 * escapement.totalHeight;
+      var drawingForExport = SVG('drawingForExport')
+          .size(totalWidth + 'mm', totalHeight + 'mm')
+          .viewbox(-totalWidth / 2, -totalHeight, totalWidth, totalHeight); 
+      var topGroup = drawingForExport.group();
+      escapement.createGraphics(topGroup);
+      var exportedSVG = drawingForExport.exportSvg({ whitespace: true });
+      document.getElementById("exportedSVG").value = exportedSVG;
+
+      // based on code from Andreas Köberle (http://stackoverflow.com/questions/10120975/how-to-save-an-svg-generated-by-raphael)
+      var anchor = document.getElementById('downloadSVG');
+      anchor.innerHTML = "Download SVG";
+      anchor.download = 'grasshopper.svg';
+      anchor.type = 'image/svg+xml';
+      
+      // see Eric Bidelman: http://updates.html5rocks.com/2012/06/Don-t-Build-Blobs-Construct-Them
+      var blob = new Blob([exportedSVG], {type: 'image/svg+xml'});
+      anchor.href = (window.URL || webkitURL).createObjectURL(blob);
+    }
+
+    // string.format function like in .Net (see http://stackoverflow.com/questions/610406/javascript-equivalent-to-printf-string-format/4673436#4673436)
+    String.prototype.format = function() {
+      var args = arguments;
+      return this.replace(/{(\d+)}/g, function(match, number) { 
+        return typeof args[number] != 'undefined'
+          ? args[number]
+          : match
+        ;
+      });
+    };
+
+    var helperLinesStyle = {
+      color: 'blue',
+      width: 0.1
+    };
+
+    var markerLinesStyle = {
+      color: 'red',
+      width: 0.1
+    };
+
+    var regularLinesStyle = {
+      color: 'black',
+      width: 0.1
+    };
+
+    function getParameterDefinitions() {
+      return [
+        { name: 'R1', caption: 'R1: Radius of the escape wheel', type: 'float', initial: 100 },
+        { name: 'Z', caption: 'Z: Tooth count of the escape wheel', type: 'int', initial: 30 },
+        { name: 'gamma', caption: 'gamma: Tooth undercut angle (typically 5 ... 12 degrees)', type: 'float', initial: 5 },
+        { name: 'R2', caption: 'R2: Distance pallet arm axis to crutch pivot axis', type: 'float', initial: 100 },
+        { name: 'N', caption: 'N: N + 0.5 is pallet span in mumber of teeth', type: 'int', initial: 9 },
+        { name: 'nsf', caption: 'nsf: Nib shortening factor (0.9 ... 1)', type: 'float', initial: 0.9 },
+        { name: 'palletEngagement', caption: 'Which pallet arm to draw engaged', type: 'choice', values: ['ENTRY', 'EXIT'], captions: ['Entry', 'Exit'], initial: 'ENTRY'},
+        { name: 'theta', caption: 'theta: Pendulum arc length (degree)', type: 'float', initial: 0, isCalculated: true },
+        { name: 'AOB', caption: 'AOB: Pallet span angle (degree)', type: 'float', initial: 0, isCalculated: true },
+        { name: 'BF', caption: 'BF: Upper limit for R2', type: 'float', initial: 0, isCalculated: true },
+        { name: 'GO', caption: 'GO: Center distance', type: 'float', isCalculated: true },
+        { name: 'AH', caption: 'AH: Entry pallet arm length', type: 'float', initial: 0, isCalculated: true },
+        { name: 'AQ', caption: 'AQ: Entry pallet nib length', type: 'float', initial: 0, isCalculated: true },
+        { name: 'BJ', caption: 'BJ: Exit pallet arm length', type: 'float', initial: 0, isCalculated: true },
+        { name: 'BR', caption: 'BR: Exit pallet nib length', type: 'float', initial: 0, isCalculated: true },
+      ];
+    }
+
+    // Class representing the whole Grasshopper escapement
+    var Escapement = (function() {
+      function Escapement() {
+      }
+
+      Escapement.prototype.update = function() {
+        this.theta = 180.0/this.Z * this.R1 / this.R2;
+        this.thetaRad = this.theta * Math.PI / 180;
+        this.AOB = 360 * (this.N + 0.5) / this.Z;
+
+        this.alpha = this.AOB / 2.0;
+        this.alphaRad = this.alpha * Math.PI / 180;
+        this.DO = this.R1 / Math.cos(this.alphaRad);
+        this.AD = this.R1 * Math.tan(this.alphaRad);
+        this.BF = this.R1 * Math.tan(this.alphaRad) * Math.tan(this.alphaRad);
+
+        this.DG = this.R2 / Math.sin(this.alphaRad);
+        this.DJ = this.R2 / Math.tan(this.alphaRad);
+   
+        // Center distance
+        this.GO = Math.sqrt(this.DO * this.DO + this.DG * this.DG);
+        
+        // Exit pallet arm length
+        this.BJ = this.AD - this.DJ;
+
+        // Entry pallet arm length
+        this.AH = this.AD + this.DJ;
+
+        // Exit pallet nib length
+        this.BR = this.BJ * this.theta * Math.PI / 180;
+
+        // Entry pallet nib length
+        this.AQ = this.AH * this.theta * Math.PI / 180;
+        this.BF = this.R1 * Math.tan(this.alphaRad) * Math.tan(this.alphaRad);
+
+        this._calcAnchorPoints();
+
+        this.crankArm = new CrankArm(this.H, this.G, this.J);
+        this.entryPalletArm = new EntryPalletArm(this.H, this.A, this.AAgainstStop, this.AH, this.Q, this.QAgainstStop, this.palletEngagement == 'ENTRY');
+        this.exitPalletArm = new ExitPalletArm(this.J, this.B, this.BAgainstStop, this.BJ, this.R, this.RAgainstStop, this.palletEngagement == 'EXIT');
+        this.escapeWheel = new EscapeWheel(this.R1, this.R1 - this.AQ, this.Z, this.gamma, this.rotationAngleRad, this.palletEngagement);
+
+        // Calculating the maximum dimensions required for the drawing
+        var maxDistanceFromYAxis = Math.max(this.R1, this.R2, Math.abs(this.AAgainstStop.x), Math.abs(this.BAgainstStop.x));
+        this.totalWidth = 2 * maxDistanceFromYAxis;
+        this.totalHeight = this.GO + this.R1 + this.R2;
+      }
+
+      Escapement.prototype._calcAnchorPoints = function() {
+        // Here we calculate the location of key points from Fig 9 in 
+        // http://www.bealltool.com/pdfs/Grasshopper0001.pdf
+        // We assume that the escape wheel center is the origin (0,0).
+        var pointLocations = {};
+
+        var A = { x: -this.R1, y: 0 };
+        var D = { x: -this.R1, y: this.AD };
+        var H = { x: -this.R1, y: this.AH };
+
+        // calculating B
+        var angleRad = Math.PI - 2 * this.alphaRad;
+        var B = { x: this.R1 * Math.cos(angleRad), y: this.R1 * Math.sin(angleRad) };
+
+        angleRad = 2 * this.alphaRad - Math.PI / 2; // 2 alpha - 90 degrees)
+        var J = { x: B.x - this.BJ * Math.cos(angleRad), y: B.y + this.BJ * Math.sin(angleRad) };
+
+        // calculating G
+        angleRad = Math.PI / 2 - this.alphaRad;
+        var G = { x: -this.R1 + this.DG * Math.cos(angleRad), y: this.AD + this.DG * Math.sin(angleRad) };
+
+        // Entry pallet nib end point when engaged with the escape wheel
+        // (point A of AH obtained by rotating AH around H by theta)
+        var reducedAngleRad = this.nsf * this.thetaRad;
+        var Q = { x: -this.R1 + this.AH * Math.sin(reducedAngleRad), y: this.AH - this.AH * Math.cos(reducedAngleRad) };
+        var AAgainstStop = { x: -this.R1 - this.AH * Math.sin(this.thetaRad), y: this.AH - this.AH * Math.cos(this.thetaRad) };
+        var QAgainstStop = { x: -this.R1 + this.AH * Math.sin(reducedAngleRad - this.thetaRad), y: this.AH - this.AH * Math.cos(reducedAngleRad - this.thetaRad) };
+
+        // Exit pallet nib end point (JB rotated around B by theta)
+        // First we pretend JB is vertical, then we rotate the resulting point.
+        // Depending on the number of teeth Z the exit pallet arm might point to the right (typical orientation;
+        // away from the the entry pallet arm) or left (i.e., towards the entry pallet arm).
+        // The orientation defines what direction the nib points to.
+        var sign = utilities._isLeft(G, J, B) ? -1 : +1; 
+        var deltaR = { x: sign * this.BJ * Math.sin(reducedAngleRad), y: -this.BJ * Math.cos(reducedAngleRad) };
+        var deltaRRotated = new Rotation(Math.PI - 2 * this.alphaRad).rotate(deltaR);
+        var R = { x: J.x + deltaRRotated.x, y: J.y + deltaRRotated.y };
+        var deltaRAgainstStop = { x: sign * this.BJ * Math.sin(reducedAngleRad - this.thetaRad), y: -this.BJ * Math.cos(reducedAngleRad - this.thetaRad) };
+        var deltaRAgainstStopRotated = new Rotation(Math.PI - 2 * this.alphaRad).rotate(deltaRAgainstStop);
+        var RAgainstStop = { x: J.x + deltaRAgainstStopRotated.x, y: J.y + deltaRAgainstStopRotated.y };
+
+        var deltaBAgainstStop = { x: -sign * this.BJ * Math.sin(this.thetaRad), y: -this.BJ * Math.cos(this.thetaRad) };
+        var deltaBAgainstStopRotated = new Rotation(Math.PI - 2 * this.alphaRad).rotate(deltaBAgainstStop);
+        var BAgainstStop = { x: J.x + deltaBAgainstStopRotated.x, y: J.y + deltaBAgainstStopRotated.y };
+
+        // To get OG vertical we need to rotate everything around the center of the escape wheel.
+        // Rothation angle:
+        var sin = G.y / this.GO;
+        this.rotationAngleRad = Math.acos(G.y / this.GO);
+
+        // Now we rotate all the points that we calculated above
+        var rotation = new Rotation(this.rotationAngleRad);
+        this.A = rotation.rotate(A);
+        this.D = rotation.rotate(D);
+        this.H = rotation.rotate(H);
+        this.B = rotation.rotate(B);
+        this.J = rotation.rotate(J);
+        this.G = rotation.rotate(G);
+        this.Q = rotation.rotate(Q);
+        this.AAgainstStop = rotation.rotate(AAgainstStop);
+        this.QAgainstStop = rotation.rotate(QAgainstStop);
+        this.R = rotation.rotate(R);
+        this.BAgainstStop = rotation.rotate(BAgainstStop);
+        this.RAgainstStop = rotation.rotate(RAgainstStop);
+      }
+
+      Escapement.prototype.createGraphics = function(parent) {
+        this._insertHelperLines(parent);
+        this.crankArm.createGraphics(parent);
+        this.entryPalletArm.createGraphics(parent);
+        this.exitPalletArm.createGraphics(parent);
+        this.escapeWheel.createGraphics(parent);
+
+        // The drawing is already centered horizontally but we still need to center it vertically.
+        // Currently the center of the escapewheel is at 0.0.
+        var deltaY = (this.R1 + this.GO + this.R2) / 2 - this.R1;
+        parent.y(-deltaY);
+
+        // Finally the y axis in the svg coordinate system points downwards. However we calcualted everything based on
+        // a y axis going upwards. So we need to mirror the drawing.
+        parent.scale(1, -1); 
+      }
+
+      Escapement.prototype._insertHelperLines = function(parent) {
+        var helperLinesGroup = parent.group();
+        helperLinesGroup.stroke(helperLinesStyle).fill('none');
+        helperLinesGroup.circle(2 * this.R2).center(this.G.x, this.G.y);
+        
+        // Add pendulum vertical and center marker
+        var halfLength = this.R1 * 0.05;
+
+        var anchorPointsGroup = helperLinesGroup.group();
+        anchorPointsGroup.stroke(markerLinesStyle).fill('none');
+
+        var points = [
+          this.A,
+          this.H,
+          this.B,
+          this.J,
+          this.G,
+          this.Q,
+          this.AAgainstStop,
+          this.QAgainstStop,
+          this.R,
+          this.BAgainstStop,
+          this.RAgainstStop,
+        ];
+
+        utilities._drawCrosses(anchorPointsGroup, points, halfLength);
+      }
+
+      return Escapement;
+    })();
+
+    // CrankArm class
+    var CrankArm = (function () {
+      function CrankArm(H, G, J) {
+        this.H = H;
+        this.G = G;
+        this.J = J;
+      }
+
+      CrankArm.prototype.createGraphics = function(parent) {
+        var crankArmGroup = parent.group();
+        this._insertHelperLines(crankArmGroup);
+      }
+
+      CrankArm.prototype._insertHelperLines = function(parent) {
+        var helperLinesGroup = parent.group();
+        helperLinesGroup.stroke(helperLinesStyle).fill('none');
+
+        helperLinesGroup.polyline([[this.H.x, this.H.y], [this.G.x, this.G.y], [this.J.x, this.J.y]]);
+      }
+
+      return CrankArm;
+    })();
+
+    // EntryPalletArm class
+    var EntryPalletArm = (function () {
+      function EntryPalletArm(H, A, AAgainstStop, AH, Q, QAgainstStop, isPalletEngaged) {
+        this.H = H;
+        this.A = A;
+        this.AAgainstStop = AAgainstStop;
+        this.AH = AH;
+        this.Q = Q;
+        this.QAgainstStop = QAgainstStop;
+        this.isPalletEngaged = isPalletEngaged; // If true, the pallet is drawn meshed with the escape wheel tooth.
+      }
+
+      EntryPalletArm.prototype.createGraphics = function(parent) {
+        var group = parent.group();
+        this._insertHelperLines(group);
+
+        group.stroke(regularLinesStyle).fill('none');
+
+        var A = this.isPalletEngaged ? this.A : this.AAgainstStop;
+        var Q = this.isPalletEngaged ? this.Q : this.QAgainstStop;
+        var path = group.path();
+        path.M(this.H);
+        path.L(A);
+        path.A(this.AH, this.AH, 0, 0, 1, Q);
+      }
+
+      EntryPalletArm.prototype._insertHelperLines = function(parent) {
+        var helperLinesGroup = parent.group();
+        helperLinesGroup.stroke(helperLinesStyle).fill('none');
+        var endPoint = this.isPalletEngaged ? this.AAgainstStop : this.A;
+        helperLinesGroup.line(this.H.x, this.H.y, endPoint.x, endPoint.y)
+     }
+
+      return EntryPalletArm;
+    })();
+
+    // ExitPalletArm class
+    var ExitPalletArm = (function () {
+      function ExitPalletArm(J, B, BAgainstStop, BJ, R, RAgainstStop, isPalletEngaged) {
+        this.J = J;
+        this.B = B;
+        this.BAgainstStop = BAgainstStop;
+        this.BJ = BJ;
+        this.R = R;
+        this.RAgainstStop = RAgainstStop;
+        this.isPalletEngaged = isPalletEngaged; // If true, the pallet is drawn meshed with the escape wheel tooth.
+      }
+
+      ExitPalletArm.prototype.createGraphics = function(parent) {
+        var group = parent.group();
+        this._insertHelperLines(group);
+
+        group.stroke(regularLinesStyle).fill('none');
+
+        var B = this.isPalletEngaged ? this.B : this.BAgainstStop;
+        var R = this.isPalletEngaged ? this.R : this.RAgainstStop;
+        var path = group.path();
+        path.M(this.J);
+        path.L(B);
+
+        var sweepFlag = utilities._isLeft(this.J, B, R) ? 1 : 0;
+        path.A(this.BJ, this.BJ, 0, 0, sweepFlag, R);
+      }
+
+      ExitPalletArm.prototype._insertHelperLines = function(parent) {
+        var helperLinesGroup = parent.group();
+        helperLinesGroup.stroke(helperLinesStyle).fill('none');
+        var endPoint = this.isPalletEngaged ? this.BAgainstStop : this.B;
+        helperLinesGroup.line(this.J.x, this.J.y, endPoint.x, endPoint.y)
+      }
+
+      return ExitPalletArm;
+    })();
+
+    // EscapeWheel class
+    var EscapeWheel = (function () {
+      function EscapeWheel(outerRadius, innerRadius, toothCount, toothUnderCutAngle, entryPalletArmAngleRad, palletEngagement) {
+        this.outerRadius = outerRadius;
+        this.innerRadius = innerRadius;
+        this.toothCount = toothCount;
+        this.toothUnderCutAngleRad = toothUnderCutAngle * Math.PI / 180;
+        this.entryPalletArmAngleRad = entryPalletArmAngleRad;
+        this.palletEngagement = palletEngagement; // indicates whether the escapew wheel should be rotated so that the entry or exit pallet are engaged.
+      }
+      EscapeWheel.prototype.createGraphics = function(parent) {
+        var escapeWheelGroup = parent.group();
+        this._insertHelperLines(escapeWheelGroup);
+        this._insertTeethPath(escapeWheelGroup);
+      }
+
+      EscapeWheel.prototype._insertHelperLines = function(parent) {
+        var helperLinesGroup = parent.group();
+        helperLinesGroup.stroke(helperLinesStyle).fill('none');
+        helperLinesGroup.circle(2 * this.outerRadius).center(0,0);
+        // Add center cross
+        var halfLength = this.outerRadius * 0.05;
+        utilities._drawCross(helperLinesGroup, {x: 0, y: 0}, halfLength);
+
+        // Inner circle
+        helperLinesGroup.circle(2 * this.innerRadius).center(0,0);
+      }
+
+      EscapeWheel.prototype._insertTeethPath = function(parent) {
+        var path = parent.path().stroke(regularLinesStyle).fill('none');
+
+        var tooth = new Tooth(this);
+        var angleRadPerTooth = 2 * Math.PI / this.toothCount;
+        // We start with the first tooth to meshing with the entry pallet arm nib.
+        var startAngleRad = Math.PI / 2 + this.entryPalletArmAngleRad;
+        if (this.palletEngagement == 'EXIT') {
+          // To mesh with the exit pallet we need to turn by a half tooth
+          startAngleRad += angleRadPerTooth/ 2;
+        }
+        for (var i = 0; i < this.toothCount; i++) {
+          var toothAngleRad = startAngleRad + angleRadPerTooth * i;
+          rotation = new Rotation(toothAngleRad);
+
+          var baseLeft = rotation.rotate(tooth.baseLeft);
+          var tipLeft = rotation.rotate(tooth.tipLeft);
+          var tipRight = rotation.rotate(tooth.tipRight);
+          var baseRight1 = rotation.rotate(tooth.baseRight1);
+          var baseRight2 = rotation.rotate(tooth.baseRight2);
+
+          if (i == 0) {
+            path.M(baseRight2);
+          }
+          path.A(this.innerRadius, this.innerRadius, 0, 0, 1, baseRight1);
+          path.L(tipRight);
+          path.A(this.outerRadius, this.outerRadius, 0, 0, 1, tipLeft);
+          path.L(baseLeft);
+        }
+        path.Z();
+      }
+
+      return EscapeWheel;
+    })();
+
+    // Start class Tooth
+    var Tooth = (function () {
+      function Tooth(escapeWheel) {
+        this.escapeWheel = escapeWheel;
+        this.tipWidthAngleRad = 0.5 * Math.PI / 180;
+ 
+        this.tipRight = {
+          x: 0,
+          y: escapeWheel.outerRadius,
+        };
+
+        var m = Math.tan(Math.PI / 2 - escapeWheel.toothUnderCutAngleRad);
+        var a = 1 + m * m;
+        var b = 2 * escapeWheel.outerRadius * m;
+        var c = escapeWheel.outerRadius * escapeWheel.outerRadius - escapeWheel.innerRadius * escapeWheel.innerRadius;
+
+        var x1 = (-b + Math.sqrt(b * b - 4 * a * c)) / 2 / a;
+        var x2 = (-b - Math.sqrt(b * b - 4 * a * c)) / 2 / a;
+        var y = x1 * m + escapeWheel.outerRadius;
+
+        this.baseRight1 = {
+          x: x1,
+          y: y,
+        };
+
+        this.baseRight2 = {
+          x: 0,
+          y: escapeWheel.innerRadius,
+        };
+
+        this.tipLeft = {
+          x: -escapeWheel.outerRadius * Math.sin(this.tipWidthAngleRad),
+          y: escapeWheel.outerRadius * Math.cos(this.tipWidthAngleRad),
+        };
+
+        this.baseLeft = {
+          x: -escapeWheel.innerRadius * Math.sin(2 * Math.PI / escapeWheel.toothCount),
+          y: escapeWheel.innerRadius * Math.cos(2 * Math.PI / escapeWheel.toothCount),
+       };
+      }
+      return Tooth;
+    })();
+
+    // Rotation
+    var Rotation = (function () {
+      function Rotation(angleRad) {
+        this.angleRad = angleRad;
+        this.cosAngle = Math.cos(angleRad);
+        this.sinAngle = Math.sin(angleRad);
+      }
+      Rotation.prototype.rotate = function(point) {
+        return {
+          x: point.x * this.cosAngle - point.y * this.sinAngle,
+          y: point.x * this.sinAngle + point.y * this.cosAngle,
+        };
+      }
+
+      return Rotation;
+    })();
+
+    // Utilities
+    var Utilities = (function () {
+      function Utilities() {
+      }
+
+      // Determines whether point c is to the left of the line from point a to point b
+      // (based on the z component of the cross product of ab and az)
+      Utilities.prototype._isLeft  = function(a, b, c) {
+        return ((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)) > 0;
+      }
+
+      Utilities.prototype._drawCrosses = function(parent, points, halfLength) {
+        for (var i = 0; i < points.length; i++) {
+          this._drawCross(parent, points[i], halfLength);
+        }
+      }
+
+      Utilities.prototype._drawCross = function(parent, point, halfLength) {
+        parent.line(point.x, point.y - halfLength, point.x, point.y + halfLength).stroke(markerLinesStyle);
+        parent.line(point.x - halfLength, point.y, point.x + halfLength, point.y).stroke(markerLinesStyle);
+      }
+
+      return Utilities;
+    })();
+  </script>
+  </head>
+  <body onload="onload()">
+    <h1>Grasshopper Escapement Builder <span style="font-size:10px">(C) 2017 Dr. Rainer Hessmer</span></h1>
+    <p>This open source Grasshopper Escapement Builder is based on the description published by Guy D. Aydlett: <a href="http://www.bealltool.com/pdfs/Grasshopper0001.pdf">The Anatomy Of The Grasshopper</a> (the pdf file has been shared by jrbeal on his <a href="http://www.beallclocks.com/index.php?topic=9.0">clock forum</a>). I am aware of shared spreadsheets that implement the equations but as far as I know this is the first online tool that generates Grasshopper escapement drawings.</p>
+    <p>The page runs in modern browsers with SVG support (if in doubt, use <a href="https://www.google.com/chrome/browser">Chrome</a>). The generated SVG drawing can be downloaded and imported in CAD applications or opened in the open source SVG editor <a href="http://www.inkscape.org/">Inkscape</a> to export as dxf or other formats.</p>
+    <p><div id="parametersblock" class="parametersdiv">
+      <div id="parameters"></div>
+      <br><input id="update" type="button" value="update" onclick="update()" />
+    </div></p>
+    <p><div id="drawing" class="svgdiv"></div></p>
+    <p><a id="downloadSVG">place holder</a></p>
+    <div id="drawingForExport" style="display: none" ></div>
+    <p><textarea id="exportedSVG" cols="100" rows="2"></textarea></p>
+
+    <h2>License and Credits</h2>
+    <ul>
+        <li>The application itself, as well as the application specific source code is copyright (c) 2016 by Dr. Rainer Hessmer and is covered by the permissive MIT license.</li>
+        <li>The calculations are based on Guy D. Aydlett's article <a href="http://www.bealltool.com/pdfs/Grasshopper0001.pdf">The Anatomy Of The Grasshopper</a></li>
+        <li>This web leverages <a href="http://svgjs.com/">svg.js</a> with plug-ins <a href="https://github.com/wout/svg.export.js">svg.export.js</a>, <a href="https://github.com/otm/svg.path.js">svg.path.js</a>, <a href="http://jillix.github.io/svg.pan-zoom.js/">svg.pan-zoom.js</a>.</li>
+    </ul>
+  </body>
+</html>

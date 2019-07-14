@@ -1,0 +1,634 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" >
+<head>
+  <title>Lantern Gear Builder</title>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+  <meta name="description" content="Lantern gear builder with SVG output. Licensed under the MIT license (http://opensource.org/licenses/mit-license.php). Copyright 2017 Dr. Rainer Hessmer">
+  <meta name="author" content="Dr. Rainer Hessmer">
+  <style type="text/css">
+    body {
+      font: 14px/20px 'Helvetica Neue Light', HelveticaNeue-Light, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      max-width: 820px;
+      margin: 0 auto;
+      padding: 10px;
+    }
+    textarea {
+      font: 12px/20px Monaco, monospace;
+      border: 1px solid #CCC;
+      border-radius: 3px;
+      background: LightGray ;
+      padding: 10px;
+      width: 800px;
+    }
+    .parametersdiv {
+      border: 1px solid black;
+      -moz-border-radius: 5px;
+      -webkit-border-radius: 5px;
+      border-radius: 5px;
+      padding: 10px;
+    }
+    .svgdiv {
+      border: 1px solid black;
+      padding: 10px;
+      //width: 800px;
+      //height: 800px;
+    }
+  </style>
+
+  <script type="text/javascript" src="./lib/js/clipper_unminified.js"></script>
+  <script type="text/javascript" src="./lib/js/svg.js"></script>
+  <script type="text/javascript" src="./lib/js/svg.path.js"></script>
+  <script type="text/javascript" src="./lib/js/svg.export.js"></script>
+  <script type="text/javascript" src="./lib/js/svg.pan-zoom.js"></script>
+  <script type="text/javascript" src="./lib/js/ParameterSupport.js"></script>
+  <script type="text/javascript">
+    var drawingWidth;
+    var drawingHeight;
+    var clipper;
+    var drawing;
+    var mainGroup;
+    var parameterDefinitions;
+    var utilities;
+    var defaultCicleSegmentCount = 180;
+    var scaleOut = 10000;
+
+    function getParameterDefinitions() {
+      return [
+        { name: 'circularPitch', caption: 'Circular pitch (the circumference of the pitch circle divided by the number of teeth):', type: 'float', initial: 10 },
+        { name: 'lanternToothCount', caption: "Lantern gear tooth count:", type: 'int', initial: 20 },
+        { name: 'lanternPitchDiameter', caption: 'Lantern gear pitch circle diameter', type: 'float', isCalculated: true },
+        { name: 'lanternToothDiameter', caption: "Lantern gear tooth diameter:", type: 'float', initial: 4 },
+        { name: 'lanternHoleDiamater', caption: "Lantern gear center hole diameter (0 for no hole):", type: 'float', initial: 4 },
+        { name: 'matchingToothCount', caption: 'Matching gear tooth count:', type: 'int', initial: 5 },
+        { name: 'matchingPitchDiameter', caption: 'Matching gear pitch circle diameter', type: 'float', isCalculated: true },
+        { name: 'matchingCenterHoleDiamater', caption: 'Matching gear center hole diameter (0 for no hole):', type: 'float', initial: 4 },
+        { name: 'backlash', caption: 'Backlash (minimal distance between meshing gears; in length units):', type: 'float', initial: 0.1 },
+        { name: 'showOption', caption: 'Show:', type: 'choice', values: [3, 1, 2], initial: 3, captions: ["Wheel 1 and Wheel 2", "Wheel 1 Only", "Wheel 2 Only"]},
+        { name: 'rotationStepsPerTooth', caption: 'Rotation steps per tooth when assembling the tooth profile (100 = good quality). Increasing the value will result in smoother profiles at the cost of higher calculation time. Incease in small increments and check the result by zooming in.', type: 'int', initial: 100 },
+      ];
+    }
+
+    var helperLinesStyle = {
+      color: 'blue',
+      width: 0.1
+    };
+
+    var markerLinesStyle = {
+      color: 'red',
+      width: 0.1
+    };
+
+    var regularLinesStyle = {
+      color: 'black',
+      width: 0.1
+    };
+
+    var regularLinesStyle2 = {
+      color: 'green',
+      width: 0.1
+    };
+
+    function onload() {
+      var drawingDiv = document.getElementById('drawing');
+      drawingWidth = 800;
+      drawingHeight = 800;
+      drawingDiv.style.width = drawingWidth + 'px';
+      drawingDiv.style.height = drawingHeight + 'px';
+
+      parameterDefinitions = getParameterDefinitions();
+      var parametersDiv = document.getElementById("parameters");
+      //parametersDiv.style.width = drawingWidth + 'px';
+
+      ParameterSupport.createParamControls(parameterDefinitions, parametersDiv);
+
+      clipper = new ClipperLib.Clipper();
+
+      drawing = SVG('drawing');
+
+      utilities = new Utilities();
+      update();
+    }
+
+    function update() {
+      var gearSet = new GearSet();
+      ParameterSupport.injectFromUI(parameterDefinitions, gearSet);
+      gearSet.update();
+      if (!gearSet.isValid) {
+        return;
+      }
+      ParameterSupport.writeToUI(parameterDefinitions, gearSet);
+      
+      display(gearSet);
+      exportSvg(gearSet);
+    }
+    function display(gearSet) {
+      drawing.clear();
+      topGroup = drawing.group();
+      topGroup.panZoom();
+
+      // Scale to fit with some border around
+      var borderRatio = 0.02;
+      var border = borderRatio * Math.max(gearSet.width, gearSet.height); 
+      var totalWidth = gearSet.width + 2 * border;
+      var totalHeight = gearSet.height + 2 * border;
+
+      var scalingFactor = Math.min(drawingWidth / totalWidth, drawingHeight / totalHeight);
+      mainGroup = topGroup.group().scale(scalingFactor, scalingFactor).x(-gearSet.center.X).y(-gearSet.center.Y);
+      mainGroup.dx(drawingWidth / scalingFactor / 2);
+      //mainGroup.dx(79.2);
+      mainGroup.dy(drawingHeight / scalingFactor / 2);
+
+      console.log(drawingWidth / scalingFactor / 2);
+      console.log(gearSet.width / 2);
+
+      mainGroup.stroke(regularLinesStyle).fill('none');
+
+      gearSet.createGraphics(mainGroup);
+    }
+
+    function exportSvg(gearSet) {
+      // For export we use a separate svg instance that is properly sized in mm.
+      // The viewbox is always in px. 1 mm = 3.543307 px (see https://mpetroff.net/2013/08/analysis-of-svg-units/)
+      var pxPerMillimeter = 3.543307;
+      // We leave some space around the escapement drawing.
+      var borderRatio = 0.05;
+      var border = borderRatio * Math.max(gearSet.width, gearSet.height); 
+      var totalWidth = gearSet.width + 2 * border;
+      var totalHeight = gearSet.height + 2 * border;
+      var drawingForExport = SVG('drawingForExport')
+          .size(totalWidth + 'mm', totalHeight + 'mm')
+          .viewbox(gearSet.left - border, gearSet.top - border, totalWidth, totalHeight); 
+      var topGroup = drawingForExport.group();
+
+      gearSet.createGraphics(topGroup);
+      var exportedSVG = drawingForExport.exportSvg({ whitespace: true });
+      document.getElementById("exportedSVG").value = exportedSVG;
+
+      // based on code from Andreas Köberle (http://stackoverflow.com/questions/10120975/how-to-save-an-svg-generated-by-raphael)
+      var anchor = document.getElementById('downloadSVG');
+      anchor.innerHTML = "Download SVG";
+      anchor.download = 'lantern_gear.svg';
+      anchor.type = 'image/svg+xml';
+      
+      // see Eric Bidelman: http://updates.html5rocks.com/2012/06/Don-t-Build-Blobs-Construct-Them
+      var blob = new Blob([exportedSVG], {type: 'image/svg+xml'});
+      anchor.href = (window.URL || webkitURL).createObjectURL(blob);
+    }
+
+    // GearSet class
+    var GearSet = (function () {
+      function GearSet() {
+      }
+      GearSet.prototype.update = function() {
+        this.isValid = this.circularPitch > this.lanternToothDiameter;
+        if (!this.isValid) {
+          alert("Tooth diameter must be less than circular pitch.");
+          return;
+        }
+
+        this.lanternGear = new LanternGear(this.circularPitch, this.lanternToothCount, this.lanternToothDiameter, this.lanternHoleDiamater);
+        this.matchingGear = new MatchingGear(this.circularPitch, this.matchingToothCount, this.lanternGear, this.backlash, this.matchingCenterHoleDiamater);
+
+        this.ratio = this.lanternGear.pitchRadius / this.matchingGear.pitchRadius;
+        this.createRotatedToothCenters();
+
+        this.matchingGear.createGearPath();
+
+        this.left = -this.lanternGear.maxRadius;
+        this.top = -Math.max(this.lanternGear.maxRadius, this.matchingGear.maxRadius);
+
+        this.width = this.lanternGear.maxRadius + this.lanternGear.pitchRadius + this.matchingGear.pitchRadius + this.matchingGear.maxRadius;
+        this.height = 2 * Math.max(this.lanternGear.maxRadius, this.matchingGear.maxRadius);
+
+        this.center = {
+          X: this.left + this.width / 2,
+          Y: 0
+        };
+
+        // Set variables that are used to write calculated values back into the parameter definitions.
+        this.lanternPitchDiameter = 2 * this.lanternGear.pitchRadius;
+        this.matchingPitchDiameter = 2 * this.matchingGear.pitchRadius;
+      }
+      GearSet.prototype.createRotatedToothCenters = function(parent) {
+        // Angle between two teeth of the lantern gear.
+        var lanternGearSweepAngle = 2 * Math.PI / this.lanternGear.toothCount;
+        var matchingGearSweepAngle = 2 * Math.PI / this.matchingGear.toothCount;
+
+        var stepCount = this.rotationStepsPerTooth;
+        var lanternGearStepAngle = lanternGearSweepAngle / stepCount;
+
+        var lanternToothCenters = [];
+        var toothCutoutCenters = []; // The centers for the cutout circles caused by the lantern tooth on the matching gear.
+        var lanternToothCenter0 = { X: this.lanternGear.center.X + this.lanternGear.pitchRadius, Y: this.lanternGear.center.Y };
+
+        // Ray from center of the matching gear to the middle of the first tooth pointing to the lower left
+        var endPoint = rayEndPoint(this.matchingGear.center, Math.PI - Math.PI / this.matchingGear.toothCount, 100);
+
+        // Find start angle that hits the half tooth ray of the matching gear
+        var deltaAngle = lanternGearSweepAngle;
+        var lower = {
+          angle: 0,
+          center: lanternToothCenter0,
+          isLeftFromRay: isLeft(this.matchingGear.center, endPoint, lanternToothCenter0)
+        };
+        var upper = {
+          angle: 0
+        };
+
+        // Search upper end of start angle so that lower and upper are on different sides of the ray
+        do {
+          upper.angle -= deltaAngle;
+
+          var lanternToothCenter = rotateAroundCenter(this.lanternGear.center, upper.angle, lanternToothCenter0);
+
+          rotationAngle2 = upper.angle * this.ratio;
+          upper.center = rotateAroundCenter(this.matchingGear.center, rotationAngle2, lanternToothCenter);
+
+          upper.isLeftFromRay = isLeft(this.matchingGear.center, endPoint, upper.center);
+        } while (upper.isLeftFromRay == lower.isLeftFromRay);
+
+        // Now the results of the lower and upper start angle are on different sides of the ray.
+        // Find the rotation angle that results in the cutout tooth center hitting the ray with accuracy epsilon.
+        var epsilon = 0.001;
+        var counter = 0;
+        while (squaredDistance(lower.center, upper.center) > epsilon) {
+          counter++;
+          var middle = {};
+          middle.angle = (upper.angle + lower.angle) / 2;
+          var lanternToothCenter = rotateAroundCenter(this.lanternGear.center, middle.angle, lanternToothCenter0);
+
+          rotationAngle2 = middle.angle * this.ratio;
+          middle.center = rotateAroundCenter(this.matchingGear.center, rotationAngle2, lanternToothCenter);
+          middle.isLeftFromRay = isLeft(this.matchingGear.center, endPoint, middle.center);
+
+          if (middle.isLeftFromRay != lower.isLeftFromRay) {
+            upper = middle;
+          } else {
+            lower = middle;
+          }
+        }
+
+        lanternGearStepAngle = -(upper.angle + lower.angle) / 2 / stepCount;
+        var startAngle = upper.angle;
+        for (var i = 0; i < stepCount + 1; i++) {
+          var rotationAngle1 = startAngle + i * lanternGearStepAngle;
+          var lanternToothCenter = rotateAroundCenter(this.lanternGear.center, rotationAngle1, lanternToothCenter0);
+          lanternToothCenters.push(lanternToothCenter);
+
+          // rotate the corresponding cutout in the matching gear
+          rotationAngle2 = rotationAngle1 * this.ratio;
+          var toothCutoutCenter = rotateAroundCenter(this.matchingGear.center, rotationAngle2, lanternToothCenter);
+          toothCutoutCenters.push(toothCutoutCenter);        
+        }
+        this.lanternGear.rotatedToothCenters = lanternToothCenters;
+        this.matchingGear.toothCutoutCenters = toothCutoutCenters;
+      }
+      GearSet.prototype.createGraphics = function(parent) {
+        var crossMarkerLength = this.lanternToothDiameter * 1.1;
+        if ((this.showOption & 1) > 0) {
+          // show gear 1
+          this.lanternGear.createGraphics(parent, crossMarkerLength);
+        }
+        if ((this.showOption & 2) > 0) {
+          // show gear 2
+          this.matchingGear.createGraphics(parent, crossMarkerLength);
+        }
+      }
+      return GearSet;
+    })();
+
+    // LanternGear class
+    var LanternGear = (function () {
+      function LanternGear(circularPitch, toothCount, toothDiameter, centerHoleDiameter) {
+        this.center = {X: 0, Y: 0};
+        this.pitchRadius = circularPitch * toothCount / 2 / Math.PI;
+        this.toothCount = toothCount;
+        this.toothDiameter = toothDiameter;
+        this.centerHoleDiameter = centerHoleDiameter;
+        this.maxRadius = this.pitchRadius + toothDiameter / 2;
+        
+        this.toothCenters = [];
+        for (var i = 0; i < this.toothCount; i++) {
+          var angle = 2 * Math.PI * i / this.toothCount;
+          var dx = this.pitchRadius * Math.cos(angle);
+          var dy = this.pitchRadius * Math.sin(angle);
+
+          var toothCenter = { X: this.center.X + dx, Y: this.center.Y + dy };
+          this.toothCenters.push(toothCenter);
+        }
+      }
+      LanternGear.prototype.createGraphics = function(parent, crossMarkerLength) {
+        var helperGroup = parent.group();
+        helperGroup.stroke(helperLinesStyle).fill('none');
+        // Pitch circle
+        helperGroup.circle(2 * this.pitchRadius).cx(this.center.X).cy(this.center.Y);
+
+        utilities.drawCross(helperGroup, this.center, crossMarkerLength);
+        for (var i = 0; i < this.toothCenters.length; i++) {
+          utilities.drawCross(helperGroup, this.toothCenters[i], crossMarkerLength);
+        }
+
+        drawRotatedTeeth = false;
+        if (drawRotatedTeeth) {
+          for (var i = 0; i < this.rotatedToothCenters.length; i++) {
+            var center = this.rotatedToothCenters[i];
+            helperGroup.circle(this.toothDiameter).cx(center.X).cy(center.Y);
+          }
+        }
+
+        var regularGroup = parent.group();
+        regularGroup.stroke(regularLinesStyle).fill('none');
+
+        // Drow the teeth
+        for (var i = 0; i < this.toothCenters.length; i++) {
+          regularGroup.circle(this.toothDiameter).cx(this.toothCenters[i].X).cy(this.toothCenters[i].Y);
+        }
+
+        if (this.centerHoleDiameter > 0) {
+          regularGroup.circle(this.centerHoleDiameter).cx(this.center.X).cy(this.center.Y);
+        }
+      }
+      return LanternGear;
+    })();
+
+    // MatchingGear class
+    var MatchingGear = (function () {
+      function MatchingGear(circularPitch, toothCount, lanternGear, backlash, centerHoleDiameter) {
+        this.pitchRadius = circularPitch * toothCount / 2 / Math.PI;
+        this.toothCount = toothCount;
+        this.lanternGear = lanternGear;
+        this.backlash = backlash;
+        this.centerHoleDiameter = centerHoleDiameter;
+        this.center = {
+          X: this.lanternGear.center.X + this.lanternGear.pitchRadius + this.pitchRadius,
+          Y: this.lanternGear.center.Y
+        };
+      }
+      // Creates the outer path of the matching gear by using the previously initialized
+      // toothCutoutCenters to subtract the lantern gear tooth cutouts from a solied disk.
+      MatchingGear.prototype.createGearPath = function() {
+        var subjectPath = [];
+        for (var i = 0; i < this.toothCutoutCenters.length; i++) {
+          subjectPath.push(clonePoint(this.toothCutoutCenters[i]));
+        }
+        subjectPath.push(clonePoint(this.center));
+        ClipperLib.JS.ScaleUpPath(subjectPath, scaleOut);
+
+        var clipper = new ClipperLib.Clipper();
+        clipper.AddPath(subjectPath, ClipperLib.PolyType.ptSubject, true);  // true means closed path;
+
+        for (var i = 0; i < this.toothCutoutCenters.length; i++) {
+          var center = this.toothCutoutCenters[i];
+          var circle = createCirclePath(center, this.lanternGear.toothDiameter / 2 + this.backlash);
+          ClipperLib.JS.ScaleUpPath(circle, scaleOut);
+          clipper.AddPath(circle, ClipperLib.PolyType.ptClip, true);  // true means closed path);
+        }
+        var solutionPaths = new ClipperLib.Paths();
+        var succeeded = clipper.Execute(ClipperLib.ClipType.ctDifference, solutionPaths, ClipperLib.PolyFillType.pftNonZero, ClipperLib.PolyFillType.pftNonZero);
+
+        var lightenedPaths = ClipperLib.JS.Lighten(solutionPaths[0], 0.001 * scaleOut);
+        var lightenedPath = lightenedPaths[0];
+
+        //console.log(JSON.stringify(this.toothCutoutCenters));
+        // Find the center point of the matching gear in the generated path.
+        // Then remove it and arrange the remaining points in sequence starting with the point next to the center.
+        var scaledOutGearCenter = {
+          X: Math.round(this.center.X * scaleOut),
+          Y: Math.round(this.center.Y * scaleOut)
+        };
+        //console.log(JSON.stringify(scaledOutGearCenter));
+        //console.log("*******************");
+
+        var centerIndex = -1;
+        for (var i = 0; i < lightenedPath.length; i++) {
+          var toothCutoutCenter = lightenedPath[i];
+          // console.log(JSON.stringify(toothCutoutCenter));
+          if (scaledOutGearCenter.X == toothCutoutCenter.X && scaledOutGearCenter.Y == toothCutoutCenter.Y) {
+            // This is the index of the point in the graph representing the center of the gear.
+            centerIndex = i;
+            break;
+          }
+        }
+
+        ClipperLib.JS.ScaleDownPath(lightenedPath, scaleOut);
+        var singleToothPath = [];
+        for (var i = centerIndex + 1; i < centerIndex + lightenedPath.length -1; i++) {
+          var index = i % lightenedPath.length;
+          singleToothPath.push(lightenedPath[index]);
+        }
+
+        // Tip of the tooth defines the maximum radius of the gear.
+        var toothTip = singleToothPath[0];
+        this.maxRadius = distance(this.center, toothTip);
+
+        // Add a mirror image of the path.
+        for (var i = singleToothPath.length - 1; i > 0; i--) {
+          var mirroredToothCutoutCenter = {
+            X: singleToothPath[i].X,
+            Y: -singleToothPath[i].Y
+          };
+          singleToothPath.push(mirroredToothCutoutCenter);
+        }
+
+        // Append rotated versions of the single tooth path for the remaining teeth.
+        this.gearPath = [];
+        for (var i = 0; i < this.toothCount; i++) {
+          var rotationAngle = i * 2 * Math.PI / this.toothCount;
+          appendRotated(singleToothPath, this.center, rotationAngle, this.gearPath);
+        }
+      }
+      MatchingGear.prototype.createGraphics = function(parent, crossMarkerLength) {
+        var helperGroup = parent.group();
+        helperGroup.stroke(helperLinesStyle).fill('none');
+
+        helperGroup.circle(2 * this.pitchRadius).cx(this.center.X).cy(this.center.Y);
+        utilities.drawCross(helperGroup, this.center, crossMarkerLength);
+
+        // Ray from center to half tooth
+        //var endPoint1 = this.toothCutoutCenters[this.toothCutoutCenters.length - 1];
+        //var endPoint2 = this.toothCutoutCenters[0];
+        //helperGroup.line(this.center.X, this.center.Y, endPoint1.X, endPoint1.Y);
+        //helperGroup.line(this.center.X, this.center.Y, endPoint2.X, endPoint2.Y);
+        //console.log(JSON.stringify(gearPath));
+
+        var regularGroup = parent.group();
+        regularGroup.stroke(regularLinesStyle).fill('none');
+        insertPath(regularGroup, this.gearPath, /* isClosed=*/true);
+
+        if (this.centerHoleDiameter > 0) {
+          regularGroup.circle(this.centerHoleDiameter).cx(this.center.X).cy(this.center.Y);
+        }
+      }
+      return MatchingGear;
+    })();
+
+    function rotateAroundCenter(center, angle, point) {
+      var cosAngle = Math.cos(angle);
+      var sinAngle = Math.sin(angle);
+
+      // Move so that center ends up at the origin
+      var movedPoint = {X: point.X - center.X, Y: point.Y - center.Y};
+      var rotated = {
+        X: movedPoint.X * cosAngle - movedPoint.Y * sinAngle,
+        Y: movedPoint.X * sinAngle + movedPoint.Y * cosAngle,
+      };
+      // Undo the move
+      return {X: rotated.X + center.X, Y: rotated.Y + center.Y};
+    }
+
+    function appendRotated(pathToRotate, centerOfRotation, rotationAngle, pathToAppendTo) {
+      for (var i = 0; i < pathToRotate.length; i++) {
+        pathToAppendTo.push(rotateAroundCenter(centerOfRotation, rotationAngle, pathToRotate[i]));
+      }
+    }
+
+    function rayEndPoint(center, angle, distance) {
+      var cosAngle = Math.cos(angle);
+      var sinAngle = Math.sin(angle);
+
+      return {
+        X: center.X + distance * cosAngle,
+        Y: center.Y + distance * sinAngle
+      };
+    }
+
+    function radToDegree(angle) {
+      return angle / Math.PI * 180;
+    }
+
+    // Determines whether point c is to the left of the line from point a to point b
+    // (based on the z component of the cross product of ab and az)
+    function isLeft(a, b, c) {
+      return ((b.X - a.X) * (c.Y - a.Y) - (b.Y - a.Y) * (c.X - a.X)) > 0;
+    }
+
+    // Squared distance between two 2d points.
+    function squaredDistance(a, b) {
+      return square(a.X - b.X) + square(a.Y - b.Y);
+    }
+
+    // Distance between two 2d points.
+    function distance(a, b) {
+      return Math.sqrt(squaredDistance(a, b));
+    }
+
+    function square(x) { return x * x }
+
+    // Tangent points for two circles centered at p1 and p2 with radii r1 and r2, respectively.
+    function GetTwoCirclesTangents(p1, r1, p2, r2) {
+      var dx = p2.X - p1.X;
+      var dy = p2.Y - p1.Y;
+      var dist = Math.sqrt(dx*dx + dy*dy);
+
+      if (dist <= Math.abs(r2 - r1)) {
+        // The circles are coinciding. There are no valid tangents.
+        return;
+      }
+
+      // Rotation from the x-axis.
+      // If you draw a line from the first circle origin to the second origin, this is the angle of that line.
+      var angle1 = Math.atan2(dy, dx);
+
+      // Relative angle of the normals. This is equal for both circles.
+      var angle2 = Math.acos((r1 - r2)/dist);
+
+      var start1 = {
+        X: p1.x + r1 * Math.cos(angle1 + angle2),
+        Y: p1.y + r1 * Math.sin(angle1 + angle2)
+      };
+
+      var end1 = {
+        X: p2.x + r2 * Math.cos(angle1 + angle2),
+        Y: p2.y + r2 * Math.sin(angle1 + angle2)
+      };
+
+      var start2 = {
+        X: p1.x + r1 * Math.cos(angle1 - angle2),
+        Y: p1.y + r1 * Math.sin(angle1 - angle2)
+      };
+
+      var end2 = {
+        X: p2.x + r2 * Math.cos(angle1 - angle2),
+        Y: p2.y + r2 * Math.sin(angle1 - angle2)
+      };
+
+      return {
+        t1: { start: start1, end: end1 },
+        t2: { start: start2, end: end2 }
+      };
+    }
+
+    // Utilities
+    var Utilities = (function () {
+      function Utilities() {
+      }
+      Utilities.prototype.drawCrosses = function(parent, points, length) {
+        for (var i = 0; i < points.length; i++) {
+          this._drawCross(parent, points[i], length);
+        }
+      }
+      Utilities.prototype.drawCross = function(parent, point, length) {
+        var halfLength = length / 2;
+        parent.line(point.X, point.Y - halfLength, point.X, point.Y + halfLength).stroke(markerLinesStyle);
+        parent.line(point.X - halfLength, point.Y, point.X + halfLength, point.Y).stroke(markerLinesStyle);
+      }
+      return Utilities;
+    })();
+
+    function clonePoint(point) {
+      return {X: point.X, Y: point.Y};
+    }
+
+    function createCirclePath(center, radius, circleSegmentCount = defaultCicleSegmentCount) {
+      var clipperPath = [];
+
+      for (var i = 0; i < circleSegmentCount; i++) {
+        var angle = 2 * Math.PI * i / circleSegmentCount;
+        var dx = radius * Math.cos(angle);
+        var dy = radius * Math.sin(angle);
+
+        clipperPath.push({ X: center.X + dx, Y: center.Y + dy });
+      }
+      return clipperPath;
+    }
+
+    // Converts array of {X:..., Y:...} points into an SVG paths.
+    function insertPath(group, points, isClosed = true) {
+      var svgPath = group.path();
+      for (var i = 0; i < points.length; i++) {
+        var point = { x: points[i].X, y: points[i].Y };
+        if (i == 0) {
+          svgPath.M(point);
+        } else {
+          svgPath.L(point);
+        }
+      }
+      if (isClosed) {
+        svgPath.Z();
+      }
+    }
+  </script>
+  </head>
+  <body onload="onload()">
+    <h1>Lantern Gear Builder <span style="font-size:10px">(C) 2017 Dr. Rainer Hessmer</span></h1>
+    <p>This is an open source online tool that generates lantern gear drawings. For comments see the associated <a href="http://www.hessmer.org/blog/2017/02/19/online-lantern-gear-builder/">blog post</a>.</p>
+    <p>The page runs in modern browsers with SVG support (if in doubt, use <a href="https://www.google.com/chrome/browser">Chrome</a>). The generated SVG drawing can be downloaded and imported in CAD applications or opened in the open source SVG editor <a href="http://www.inkscape.org/">Inkscape</a> to export as dxf or other formats.</p>
+    <div id="parametersblock" class="parametersdiv">
+      <b>Parameters</b> (svg output assumes inputs in millimeters)
+      <div id="parameters"></div>
+      <input id="update" type="button" value="update" onclick="update()" />
+    </div>
+    <p><div id="svgcontainer"></div></p>
+    <p><div id="drawing" class="svgdiv"></div></p>
+    <p><a id="downloadSVG">place holder</a></p>
+    <div id="drawingForExport" style="display: none" ></div>
+    <p><textarea id="exportedSVG" rows="2"></textarea></p>
+
+    <h2>License and Credits</h2>
+    <ul>
+        <li>The application itself, as well as the application specific source code is copyright (c) 2017 by Dr. Rainer Hessmer and is covered by the permissive MIT license.</li>
+        <li>This page leverages <a href="http://svgjs.com/">svg.js</a> with plug-ins <a href="https://github.com/wout/svg.export.js">svg.export.js</a>, <a href="https://github.com/otm/svg.path.js">svg.path.js</a>, <a href="http://jillix.github.io/svg.pan-zoom.js/">svg.pan-zoom.js</a>.</li>
+        <li>For boolean 2d operations <a href="http://jsclipper.sourceforge.net/">Javascript Clipper</a> is used.</li>
+    </ul>
+  </body>
+</html>
