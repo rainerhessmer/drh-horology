@@ -1,0 +1,637 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" >
+<head>
+  <title>Deadbeat Escapement Builder</title>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+  <meta name="description" content="Deadbeat (Graham) escapement builder with SVG output. Licensed under the MIT license (http://opensource.org/licenses/mit-license.php). Copyright 2019 Dr. Rainer Hessmer">
+  <meta name="author" content="Dr. Rainer Hessmer">
+  <style type="text/css">
+    body {
+      font: 14px/20px 'Helvetica Neue Light', HelveticaNeue-Light, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      max-width: 820px;
+      margin: 0 auto;
+      padding: 10px;
+    }
+    textarea {
+      font: 12px/20px Monaco, monospace;
+      border: 1px solid #CCC;
+      border-radius: 3px;
+      background: LightGray ;
+      padding: 10px;
+      width: 800px;
+    }
+    .parametersdiv {
+      border: 1px solid black;
+      -moz-border-radius: 5px;
+      -webkit-border-radius: 5px;
+      border-radius: 5px;
+      padding: 10px;
+    }
+    .svgdiv {
+      border: 1px solid black;
+      padding: 10px;
+    }
+  </style>
+
+  <script type="text/javascript" src="./lib/js/svg.js"></script>
+  <script type="text/javascript" src="./lib/js/svg.path.js"></script>
+  <script type="text/javascript" src="./lib/js/svg.export.js"></script>
+  <script type="text/javascript" src="./lib/js/svg.pan-zoom.js"></script>
+  <script type="text/javascript" src="./lib/js/ParameterSupport.js"></script>
+  <script type="text/javascript">
+    var drawingWidth;
+    var drawingHeight;
+    var clipper;
+    var drawing;
+    var mainGroup;
+    var parameterDefinitions;
+    var utilities;
+    var defaultCicleSegmentCount = 180;
+    var scaleOut = 10000;
+
+    function getParameterDefinitions() {
+      return [
+        { name: 'eswTipDiameter', caption: 'Outer diameter of the escape wheel:', type: 'float', initial: 100 },
+        { name: 'eswRootDiameter', caption: 'Root diameter of the escape wheel:', type: 'float', initial: 75 },
+        { name: 'eswAxleDiameter', caption: 'Axle diameter of the escape wheel:', type: 'float', initial: 4 },
+        { name: 'eswToothCount', caption: 'Tooth count of the escape wheel:', type: 'int', initial: 30 },
+        { name: 'eswToothTrailingAngleDegree', caption: "Trailing angle (degree) of an escpement wheel tooth:", type: 'float', initial: 18 },
+        { name: 'eswToothCentralAngleDegree', caption: "Central angle (degree) of an escpement wheel tooth:", type: 'float', initial: 1 },
+        { name: 'eswToothLeadingAngleDegree', caption: "Leading angle (degree) of an escpement wheel tooth:", type: 'float', initial: 2 },
+
+        { name: 'forkToothSpanCount', caption: 'Number of full teeth spanned by the fork:', type: 'int', initial: 7 },
+        { name: 'forkLockAngle', caption: 'Lock angle (degrees):', type: 'float', initial: 1 },
+        { name: 'forkDropAngle', caption: 'Drop angle (degrees); must be greater than the central angle of a tooth:', type: 'float', initial: 1.5 },
+        { name: 'forkLiftAngle', caption: 'Lift angle (degrees):', type: 'float', initial: 2 },
+        { name: 'forkArmClearanceAngle', caption: 'Clearance angle of the arm (degrees):', type: 'float', initial: 10 },
+        { name: 'forkAxleDiameter', caption: 'Axle diamater of the fork:', type: 'float', initial: 8 },
+        { name: 'impulseFaceAngle', caption: 'Impulse face angle (degree) should be close to 0 (controlled by lift angle):', type: 'float', isCalculated: true },
+      ];
+    }
+
+    var helperLinesStyle = {
+      color: 'blue',
+      width: 0.1
+    };
+
+    var markerLinesStyle = {
+      color: 'red',
+      width: 0.1
+    };
+
+    var regularLinesStyle = {
+      color: 'black',
+      width: 0.1
+    };
+
+    var regularLinesStyle2 = {
+      color: 'green',
+      width: 0.1
+    };
+
+    function onload() {
+      var drawingDiv = document.getElementById('drawing');
+      drawingWidth = 800;
+      drawingHeight = 800;
+      drawingDiv.style.width = drawingWidth + 'px';
+      drawingDiv.style.height = drawingHeight + 'px';
+
+      parameterDefinitions = getParameterDefinitions();
+      var parametersDiv = document.getElementById("parameters");
+
+      ParameterSupport.createParamControls(parameterDefinitions, parametersDiv);
+
+      drawing = SVG('drawing');
+      utilities = new Utilities();
+
+      update();
+    }
+
+    function update() {
+      var escapementParams = {
+        center: {x: 0, y: 0}
+      };
+      ParameterSupport.injectFromUI(parameterDefinitions, escapementParams);
+
+      var deadbeatEscapement = new DeadbeatEscapement(escapementParams);
+      ParameterSupport.writeToUI(parameterDefinitions, deadbeatEscapement);
+      
+      display(deadbeatEscapement);
+      exportSvg(deadbeatEscapement);
+    }
+
+    function display(deadbeatEscapement) {
+      drawing.clear();
+      topGroup = drawing.group();
+      topGroup.panZoom();
+
+      // Scale to fit with some border around
+      var borderRatio = 0.02;
+      var border = borderRatio * deadbeatEscapement.width; 
+      var totalWidth = deadbeatEscapement.width + 2 * border;
+      var totalHeight = deadbeatEscapement.height + 2 * border;
+
+      var scalingFactor = Math.min(drawingWidth / totalWidth, drawingHeight / totalHeight);
+      mainGroup = topGroup.group().scale(scalingFactor, scalingFactor).x(-deadbeatEscapement.center.x).y(-deadbeatEscapement.center.y);
+      mainGroup.dx(drawingWidth / scalingFactor / 2);
+      mainGroup.dy(drawingHeight / scalingFactor / 2);
+
+      console.log(drawingWidth / scalingFactor / 2);
+      console.log(deadbeatEscapement.width / 2);
+
+      mainGroup.stroke(regularLinesStyle).fill('none');
+
+      deadbeatEscapement.createGraphics(mainGroup);
+    }
+
+    function exportSvg(deadbeatEscapement) {
+      // For export we use a separate svg instance that is properly sized in mm.
+      // The viewbox is always in px. 1 mm = 3.543307 px (see https://mpetroff.net/2013/08/analysis-of-svg-units/)
+      var pxPerMillimeter = 3.543307;
+      // We leave some space around the escapement drawing.
+      var borderRatio = 0.05;
+      var border = borderRatio * Math.max(deadbeatEscapement.width, deadbeatEscapement.height); 
+      var totalWidth = deadbeatEscapement.width + 2 * border;
+      var totalHeight = deadbeatEscapement.height + 2 * border;
+      var drawingForExport = SVG('drawingForExport')
+          .size(totalWidth + 'mm', totalHeight + 'mm')
+          .viewbox(deadbeatEscapement.left - border, deadbeatEscapement.top - border, totalWidth, totalHeight); 
+      var topGroup = drawingForExport.group();
+
+      deadbeatEscapement.createGraphics(topGroup);
+      var exportedSVG = drawingForExport.exportSvg({ whitespace: true });
+      document.getElementById("exportedSVG").value = exportedSVG;
+
+      // based on code from Andreas Köberle (http://stackoverflow.com/questions/10120975/how-to-save-an-svg-generated-by-raphael)
+      var anchor = document.getElementById('downloadSVG');
+      anchor.innerHTML = "Download SVG";
+      anchor.download = 'deadbeat_escapement.svg';
+      anchor.type = 'image/svg+xml';
+      
+      // see Eric Bidelman: http://updates.html5rocks.com/2012/06/Don-t-Build-Blobs-Construct-Them
+      var blob = new Blob([exportedSVG], {type: 'image/svg+xml'});
+      anchor.href = (window.URL || webkitURL).createObjectURL(blob);
+    }
+    
+    class EscapementWheel {
+      constructor(escapementParams) {
+        this.center = escapementParams.center;
+        this.tipRadius = escapementParams.eswTipDiameter / 2;
+        this.rootRadius = escapementParams.eswRootDiameter / 2;
+        this.axleRadius = escapementParams.eswAxleDiameter / 2;
+        this.toothCount = escapementParams.eswToothCount;
+        this.toothTrailingAngle = degreeToRad(escapementParams.eswToothTrailingAngleDegree);
+        this.toothCentralAngle = degreeToRad(escapementParams.eswToothCentralAngleDegree);
+        this.toothLeadingAngle = degreeToRad(escapementParams.eswToothLeadingAngleDegree);
+
+        this.teeth = this.createTeeth();
+      }
+
+      createTeeth() {
+        let teeth = [];
+
+        let toothTemplate = this.createTooth();
+        let dTheta = 2 * Math.PI / this.toothCount;
+        for (let i = 0; i < this.toothCount; i++) {
+          teeth.push(toothTemplate.cloneRotated(i * dTheta))
+        }
+        return teeth;
+      }
+
+      createTooth() {
+        // Create tooth template at 12 o'clock position
+        let angle = -Math.PI / 2;
+        let a = fromPolar({r: this.tipRadius, theta: angle});
+        let dr = (this.tipRadius - this.rootRadius) * 0.9;
+        // A point on the trailing edge
+        let aPrime = {
+          x: a.x - dr * Math.sin(this.toothTrailingAngle),
+          y: a.y + dr * Math.cos(this.toothTrailingAngle)
+        };
+        // Find the intersection with the root radius
+        let d = findCircleLineIntersections(this.center, this.rootRadius, a, aPrime)[0];
+
+        let b = fromPolar({r: this.tipRadius, theta: angle + this.toothCentralAngle});
+        // Start with point on leading edge starting from a then rotate
+        let bPrimeFromA = {
+          x: a.x - dr * Math.sin(this.toothLeadingAngle),
+          y: a.y + dr * Math.cos(this.toothLeadingAngle)
+        };
+        let bPrime = rotate(bPrimeFromA, this.center, -this.toothCentralAngle);
+        let c = findCircleLineIntersections(this.center, this.rootRadius, b, bPrime)[0];
+
+        return new Tooth(this, a, b, c, d);
+      }
+
+      createGraphics(parent, crossMarkerLength) {
+        var helperGroup = parent.group();
+        helperGroup.stroke(helperLinesStyle).fill('none');
+
+        var regularGroup = parent.group();
+        regularGroup.stroke(regularLinesStyle).fill('none');
+
+        // tip and root circles
+        helperGroup.circle(2 * this.tipRadius).cx(this.center.x).cy(this.center.y);
+        helperGroup.circle(2 * this.rootRadius).cx(this.center.x).cy(this.center.y);
+
+        utilities.drawCross(helperGroup, this.center, crossMarkerLength);
+
+        this.drawTeeth(regularGroup);
+        regularGroup.circle(this.axleRadius).cx(this.center.x).cy(this.center.y);
+      }
+
+      drawTeeth(group) {
+        var svgPath = group.path();
+
+        for (let i = 0; i < this.teeth.length; i++) {
+          let tooth = this.teeth[i];
+          if (i == 0) {
+            // First point
+            svgPath.M(tooth.b);
+          } else {
+            svgPath.L(tooth.b);
+          }
+          svgPath.A(this.rootRadius, this.tipRadius, 0, 0, 0, tooth.a);
+          svgPath.L(tooth.d);
+
+          let nextTooth = this.teeth[(i + 1) % this.teeth.length];
+          svgPath.A(this.rootRadius, this.rootRadius, 0, 0, 0, nextTooth.c);
+        }
+
+        // Close the path
+        svgPath.Z();
+      }
+    }
+
+    class Tooth {
+      constructor(escapementWheel, a, b, c, d) {
+        this.escapementWheel = escapementWheel;
+        this.a = a;
+        this.b = b;
+        this.c = c;
+        this.d = d;
+      }
+
+      cloneRotated(theta) {
+        return new Tooth(
+          this.escapementWheel,
+          rotate(this.a, this.escapementWheel.center, theta),
+          rotate(this.b, this.escapementWheel.center, theta),
+          rotate(this.c, this.escapementWheel.center, theta),
+          rotate(this.d, this.escapementWheel.center, theta)
+        );
+      }
+    }
+
+    class Fork {
+      constructor(escapementWheel, escapementParams) {
+        this.escapementWheel = escapementWheel;
+        this.spanToothCount = escapementParams.forkToothSpanCount + 0.5;
+
+        this.lockAngle = degreeToRad(escapementParams.forkLockAngle);
+        this.dropAngle = degreeToRad(escapementParams.forkDropAngle);
+        this.liftAngle = degreeToRad(escapementParams.forkLiftAngle);
+
+        this.armClearanceAngle = degreeToRad(escapementParams.forkArmClearanceAngle);
+        this.axleRadius = escapementParams.forkAxleDiameter / 2;
+
+        let angularPitch = 2 * Math.PI / this.escapementWheel.toothCount;
+        let spanAngle = this.spanToothCount * angularPitch;
+
+        let forkWheelPalletAngle = spanAngle / 2;
+        let tipRadius = this.escapementWheel.tipRadius;
+
+        this.forkWheelDistance = tipRadius / Math.cos(forkWheelPalletAngle);
+        //this.forkWheelDistance = tipRadius * Math.cos(forkWheelPalletAngle) + tipRadius * Math.sin(forkWheelPalletAngle);
+        this.center = {
+          x: this.escapementWheel.center.x,
+          y: this.escapementWheel.center.y - this.forkWheelDistance
+        };
+
+        let palletAngularWidth = angularPitch / 2 - this.dropAngle;
+        let palletAngle = spanAngle / 2;
+
+        this.outerRadius = Math.sqrt(tipRadius * tipRadius + this.forkWheelDistance * this.forkWheelDistance
+            - 2 * tipRadius * this.forkWheelDistance * Math.cos(palletAngle + palletAngularWidth / 2));
+        this.innerRadius = Math.sqrt(tipRadius * tipRadius + this.forkWheelDistance * this.forkWheelDistance
+            - 2 * tipRadius * this.forkWheelDistance * Math.cos(palletAngle - palletAngularWidth / 2));
+
+        // Entry Pallet
+        this.Ln = translate(fromPolar({
+          r: this.outerRadius,
+          theta: Math.PI / 2 + palletAngle
+        }), vector(0, -this.forkWheelDistance));
+
+        this.LnPrime = translate(fromPolar({
+          r: this.innerRadius,
+          theta: Math.PI / 2 + palletAngle
+        }), vector(0, -this.forkWheelDistance));
+
+        this.Cn = translate(fromPolar({
+          r: this.outerRadius,
+          theta: Math.PI / 2 + palletAngle - this.lockAngle
+        }), vector(0, -this.forkWheelDistance));
+
+        this.Dn = translate(fromPolar({
+          r: this.innerRadius,
+          theta: Math.PI / 2 + palletAngle - (this.lockAngle + this.liftAngle)
+        }), vector(0, -this.forkWheelDistance));
+
+        this.Qn = translate(fromPolar({
+          r: this.innerRadius,
+          theta: Math.PI / 2 + palletAngle + this.armClearanceAngle
+        }), vector(0, -this.forkWheelDistance));
+
+        // Exit Pallet
+        this.Dx = translate(fromPolar({
+          r: this.outerRadius,
+          theta: Math.PI / 2 - palletAngle
+        }), vector(0, -this.forkWheelDistance));
+
+        this.Cx = translate(fromPolar({
+          r: this.innerRadius,
+          theta: Math.PI / 2 - palletAngle - this.liftAngle
+        }), vector(0, -this.forkWheelDistance));
+
+        this.Lx = translate(fromPolar({
+          r: this.innerRadius,
+          theta: Math.PI / 2 - palletAngle - (this.lockAngle + this.liftAngle)
+        }), vector(0, -this.forkWheelDistance));
+
+        this.Qx = translate(fromPolar({
+          r: this.innerRadius,
+          theta: Math.PI / 2 - palletAngle - (this.lockAngle + this.liftAngle + this.armClearanceAngle)
+        }), vector(0, -this.forkWheelDistance));
+
+        // Calculate angle of entry impulse face when touching the tip of the escapement tooth.
+        // Rotate Cn and Dn so that Cn just touches the tip of the tooth
+        this.CnPrime = rotate(this.Cn, this.center, -this.lockAngle);
+        this.DnPrime = rotate(this.Dn, this.center, -this.lockAngle);
+
+        this.impulseFaceAngle = -Math.atan2(this.DnPrime.y - this.CnPrime.y, this.DnPrime.x - this.CnPrime.x);
+      }
+
+      createGraphics(parent, crossMarkerLength) {
+        var helperGroup = parent.group();
+        helperGroup.stroke(helperLinesStyle).fill('none');
+		
+        var regularGroup = parent.group();
+        regularGroup.stroke(regularLinesStyle).fill('none');
+
+        utilities.drawCross(helperGroup, this.center, crossMarkerLength);
+
+        //helperGroup.circle(2 * this.outerRadius).cx(this.center.x).cy(this.center.y);
+        //helperGroup.circle(2 * this.innerRadius).cx(this.center.x).cy(this.center.y);
+
+        // Entry Pallet
+        utilities.drawCross(helperGroup, this.Ln, crossMarkerLength);
+        utilities.drawCross(helperGroup, this.Cn, crossMarkerLength);
+        utilities.drawCross(helperGroup, this.Dn, crossMarkerLength);
+        utilities.drawCross(helperGroup, this.Qn, crossMarkerLength);
+
+        utilities.drawCross(helperGroup, this.CnPrime, crossMarkerLength);
+        utilities.drawCross(helperGroup, this.DnPrime, crossMarkerLength);
+
+        // Exit Pallet
+        utilities.drawCross(helperGroup, this.Dx, crossMarkerLength);
+        utilities.drawCross(helperGroup, this.Cx, crossMarkerLength);
+        utilities.drawCross(helperGroup, this.Lx, crossMarkerLength);
+        utilities.drawCross(helperGroup, this.Qx, crossMarkerLength);
+
+        regularGroup.circle(this.axleRadius).cx(this.center.x).cy(this.center.y);
+
+        //helperGroup.line(this.center.x, this.center.y, this.Qx.x, this.Qx.y).stroke(markerLinesStyle);
+
+        this.drawFork(regularGroup);
+
+        helperGroup.line(this.escapementWheel.center.x, this.escapementWheel.center.y, this.center.x, this.center.y);
+      }
+
+      drawFork(group) {
+        var svgPath = group.path();
+        svgPath.M(this.center);
+        svgPath.L(this.Qx);
+        svgPath.A(this.innerRadius, this.innerRadius, 0, 0, 1, this.Cx);
+        svgPath.L(this.Dx);
+        svgPath.A(this.outerRadius, this.outerRadius, 0, 1, 0, this.Cn);
+        svgPath.L(this.Dn);
+        svgPath.A(this.innerRadius, this.innerRadius, 0, 0, 1, this.Qn);
+
+        // Close the path
+        svgPath.Z();
+      }
+    }
+ 
+    class DeadbeatEscapement {
+      constructor(escapementParams) {
+        this.center = escapementParams.center;
+
+        this.width = escapementParams.eswTipDiameter;
+        this.height = this.width;
+        this.left = -this.width / 2;
+        this.top = -this.height / 2;
+
+        this.escapementWheel = new EscapementWheel(escapementParams);
+        this.fork = new Fork(this.escapementWheel, escapementParams);
+      }
+
+      get impulseFaceAngle() {
+        return radToDegree(this.fork.impulseFaceAngle);
+      }
+
+      createGraphics(parentGroup) {
+        var crossMarkerLength = this.escapementWheel.axleRadius * 1.1;
+        this.escapementWheel.createGraphics(parentGroup, crossMarkerLength);
+        this.fork.createGraphics(parentGroup, crossMarkerLength);
+      }
+    }
+
+    function degreeToRad(angleDegree) {
+      return angleDegree * Math.PI / 180;
+    }
+
+    function radToDegree(angle) {
+      return angle / Math.PI * 180;
+    }
+
+    function angleBetweenVectors(v1, v2) {
+      var dotProduct = v1.x * v2.x + v1.y * v2.y;
+      return Math.acos(dotProduct / Math.sqrt(lengthSquared(v1) * lengthSquared(v2)));
+    }
+
+    // The angle describing how much the two vectors p0 - p1 and p2 - p1 deviate from a straigt line. 
+    function curvatureAngle(p0, p1, p2) {
+      var v1 = {x: p0.x - p1.x, y: p0.y - p1.y};
+      var v2 = {x: p2.x - p1.x, y: p2.y - p1.y};
+
+      var theta = angleBetweenVectors(v1, v2);
+      var curv = Math.PI - theta;
+      console.log('theta: ' + radToDegree(theta) + ' curv: ' + radToDegree(curv));
+
+      return curv;
+    }
+
+    // Squared length of 2d vector
+    function lengthSquared(v) {
+      return v.x * v.x + v.y * v.y;
+    }
+
+    // Length of 2d vector
+    function length(v) {
+      return Math.sqrt(v.x * v.x + v.y * v.y);
+    }
+
+    function distance(p1, p2) {
+      return length({x: p1.x - p2.x, y: p1.y - p2.y});
+    }
+
+    function vector(x, y) {
+      return {x: x, y: y};
+    }
+
+    function toPolar(v) {
+      return {
+        r: length(v),
+        theta: Math.atan2(v.y, v.x)
+      }
+    }
+
+    function fromPolar(p) {
+      return {
+        x: p.r * Math.cos(p.theta),
+        y: p.r * Math.sin(p.theta)
+      }
+    }
+
+    // Translate 2d point p by vector v
+    function translate(p, v) {
+      return {
+        x: p.x + v.x,
+        y: p.y + v.y
+      };
+    }
+
+    // Rotate point p around c by angle theta
+    function rotate(p, c, theta) {
+      let cos = Math.cos(theta);
+      let sin = Math.sin(theta);
+      return {
+        x: (cos * (p.x - c.x)) + (sin * (p.y - c.y)) + c.x,
+        y: (cos * (p.y - c.y)) - (sin * (p.x - c.x)) + c.y
+      };
+    }
+
+    // Based on https://stackoverflow.com/questions/1073336/circle-line-segment-collision-detection-algorithm/1088058#1088058 
+    function findCircleLineIntersections(c, r, a, b) {
+      // c: center of the circle
+      // r: radius of the circle
+      // a: start of line
+      // b: end of line
+
+      let lab = distance(a, b);
+      
+      // compute the direction vector a to b
+      d = {
+        x: (b.x - a.x) / lab,
+        y: (b.y - a.y) / lab
+      };
+
+      // the equation of the line ab is x = d.x * t + a.x, y = d.y * t + a.y with 0 <= t <= length(ab).
+
+      // compute the distance between the points a and e, where
+      // e is the point on the line a b closest the circle center c
+      let t = d.x * (c.x - a.x) + d.y * (c.y - a.y);  
+
+      // compute point e
+      let e = {
+        x: t * d.x + a.x,
+        y: t * d.y + a.y
+      };
+
+      // compute the euclidean distance between e and c
+      let lec = distance(e, c);
+
+      let intersects = [];
+      // test if the line intersects the circle
+      if (lec < r) {
+        // compute distance from t to circle intersection point
+        let dt = Math.sqrt(r * r - lec * lec);
+
+        // compute first intersection point
+        intersects.push({
+          x: (t - dt) * d.x + a.x,
+          y: (t - dt) * d.y + a.y
+        });
+
+        // compute second intersection point
+        intersects.push({
+          x: (t + dt) * d.x + a.x,
+          y: (t + dt) * d.y + a.y
+        });
+      } else if (lec == r) {
+        intersects.push(e);
+      }
+
+      return intersects;
+    }
+
+    // Utilities
+    var Utilities = (function () {
+      function Utilities() {
+      }
+      Utilities.prototype.drawCrosses = function(parent, points, length) {
+        for (var i = 0; i < points.length; i++) {
+          this._drawCross(parent, points[i], length);
+        }
+      }
+      Utilities.prototype.drawCross = function(parent, point, length) {
+        var halfLength = length / 2;
+        parent.line(point.x, point.y - halfLength, point.x, point.y + halfLength).stroke(markerLinesStyle);
+        parent.line(point.x - halfLength, point.y, point.x + halfLength, point.y).stroke(markerLinesStyle);
+      }
+      return Utilities;
+    })();
+
+    // Converts array of {x:..., y:...} points into an SVG paths.
+    function insertPath(group, points, isClosed = true) {
+      var svgPath = group.path();
+      for (var i = 0; i < points.length; i++) {
+        var point = points[i];
+        if (i == 0) {
+          svgPath.M(point);
+        } else {
+          svgPath.L(point);
+        }
+      }
+      if (isClosed) {
+        svgPath.Z();
+      }
+    }
+  </script>
+  </head>
+  <body onload="onload()">
+    <h1>Deadbeat Escapement (Graham Escapement) Builder <span style="font-size:10px">(C) 2019 Dr. Rainer Hessmer</span></h1>
+    <p>This is an open source online tool that generates deadbeat escapements (Grahem escapements) based on
+      <a href="https://www.ocf.berkeley.edu/~wwu/cgi-bin/yabb/YaBB.cgi?board=riddles_general;action=display;num=1437253052">Mechanical Pendulum Gear Clocks</a>
+      by rloginunix</p>
+    <p>The page runs in modern browsers with SVG support (if in doubt, use <a href="https://www.google.com/chrome/browser">Chrome</a>).
+       The generated SVG drawing can be downloaded and imported in CAD applications or opened in the open source SVG editor 
+       <a href="http://www.inkscape.org/">Inkscape</a> to export as dxf or other formats.</p>
+    <div id="parametersblock" class="parametersdiv">
+      <b>Parameters</b> (svg output assumes inputs in millimeters)
+      <div id="parameters"></div>
+      <input id="update" type="button" value="update" onclick="update()" />
+    </div>
+    <p><div id="svgcontainer"></div></p>
+    <p><div id="drawing" class="svgdiv"></div></p>
+    <p><a id="downloadSVG">place holder</a></p>
+    <div id="drawingForExport" style="display: none" ></div>
+    <p><textarea id="exportedSVG" rows="2"></textarea></p>
+
+    <h2>License and Credits</h2>
+    <ul>
+        <li>The application itself, as well as the application specific source code is copyright (c) 2019 by Dr. Rainer Hessmer and is covered by the permissive MIT license.</li>
+        <li>This page leverages <a href="http://svgjs.com/">svg.js</a> with plug-ins <a href="https://github.com/wout/svg.export.js">svg.export.js</a>, <a href="https://github.com/otm/svg.path.js">svg.path.js</a>, <a href="http://jillix.github.io/svg.pan-zoom.js/">svg.pan-zoom.js</a>.</li>
+    </ul>
+  </body>
+</html>
