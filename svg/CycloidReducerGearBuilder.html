@@ -1,0 +1,618 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" >
+<head>
+  <title>Cycloid Reducer Gear Builder</title>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+  <meta name="description" content="Cycloid reducer gear builder with SVG output. Licensed under the MIT license (http://opensource.org/licenses/mit-license.php). Copyright 2019 Dr. Rainer Hessmer">
+  <meta name="author" content="Dr. Rainer Hessmer">
+  <style type="text/css">
+    body {
+      font: 14px/20px 'Helvetica Neue Light', HelveticaNeue-Light, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      max-width: 820px;
+      margin: 0 auto;
+      padding: 10px;
+    }
+    textarea {
+      font: 12px/20px Monaco, monospace;
+      border: 1px solid #CCC;
+      border-radius: 3px;
+      background: LightGray ;
+      padding: 10px;
+      width: 800px;
+    }
+    .parametersdiv {
+      border: 1px solid black;
+      -moz-border-radius: 5px;
+      -webkit-border-radius: 5px;
+      border-radius: 5px;
+      padding: 10px;
+    }
+    .svgdiv {
+      border: 1px solid black;
+      padding: 10px;
+    }
+  </style>
+
+  <script type="text/javascript" src="./lib/js/svg.js"></script>
+  <script type="text/javascript" src="./lib/js/svg.path.js"></script>
+  <script type="text/javascript" src="./lib/js/svg.export.js"></script>
+  <script type="text/javascript" src="./lib/js/svg.pan-zoom.js"></script>
+  <script type="text/javascript" src="./lib/js/ParameterSupport.js"></script>
+  <script type="text/javascript">
+    var drawingWidth;
+    var drawingHeight;
+    var clipper;
+    var drawing;
+    var mainGroup;
+    var parameterDefinitions;
+    var utilities;
+    var defaultCicleSegmentCount = 180;
+    var scaleOut = 10000;
+
+    function getParameterDefinitions() {
+      return [
+        { name: 'N', caption: 'Number of roller pins:', type: 'int', initial: 12 },
+        { name: 'r', caption: 'Roller pin radius:', type: 'float', initial: 2.1 },
+        { name: 'R', caption: "Roller circle radius:", type: 'float', initial: 20 },
+        { name: 'E', caption: 'Eccentricity (offset of cam center from roller circle center):', type: 'float', initial: 1.5 },
+        { name: 'pressureAngleLimitDegree', caption: 'Pressure angle limit in degrees:', type: 'float', initial: 50 },
+        { name: 'addendumFlatteningRatio', caption: 'Addendum flattening ratio (0 to 1; 0 for no flattening):', type: 'float', initial: 0.5 },
+        { name: 'dedendumDeepeningRatio', caption: 'Dedendum deepening ratio (0 to 1; 0 for no flattening):', type: 'float', initial: 0.5 },
+        { name: 'holeRadius', caption: 'cam hole radius:', type: 'float', initial: 8 },
+        { name: 'eccentricityLimit', caption: 'Upper bound (excluded) of allowed eccentricity', type: 'float', isCalculated: true },
+        { name: 'speedRatio', caption: 'Speed ratio', type: 'float', isCalculated: true },
+      ];
+    }
+
+    var helperLinesStyle = {
+      color: 'blue',
+      width: 0.1
+    };
+
+    var markerLinesStyle = {
+      color: 'red',
+      width: 0.1
+    };
+
+    var regularLinesStyle = {
+      color: 'black',
+      width: 0.1
+    };
+
+    var regularLinesStyle2 = {
+      color: 'green',
+      width: 0.1
+    };
+
+    function onload() {
+      var drawingDiv = document.getElementById('drawing');
+      drawingWidth = 800;
+      drawingHeight = 800;
+      drawingDiv.style.width = drawingWidth + 'px';
+      drawingDiv.style.height = drawingHeight + 'px';
+
+      parameterDefinitions = getParameterDefinitions();
+      var parametersDiv = document.getElementById("parameters");
+
+      ParameterSupport.createParamControls(parameterDefinitions, parametersDiv);
+
+      drawing = SVG('drawing');
+      utilities = new Utilities();
+
+      update();
+    }
+
+    function update() {
+      var gearSetParams = {
+        center: {x: 0, y: 0}
+      };
+      ParameterSupport.injectFromUI(parameterDefinitions, gearSetParams);
+
+      var gearSet = new GearSet(gearSetParams);
+      ParameterSupport.writeToUI(parameterDefinitions, gearSet);
+
+      if (!gearSet.isValid) {
+        alert("Eccentricity E must be less than " + this.EUpperBound);
+        return;
+      }
+      
+      display(gearSet);
+      exportSvg(gearSet);
+    }
+
+    function display(gearSet) {
+      drawing.clear();
+      topGroup = drawing.group();
+      topGroup.panZoom();
+
+      // Scale to fit with some border around
+      var borderRatio = 0.02;
+      var border = borderRatio * gearSet.width; 
+      var totalWidth = gearSet.width + 2 * border;
+      var totalHeight = gearSet.height + 2 * border;
+
+      var scalingFactor = Math.min(drawingWidth / totalWidth, drawingHeight / totalHeight);
+      mainGroup = topGroup.group().scale(scalingFactor, scalingFactor).x(-gearSet.center.x).y(-gearSet.center.y);
+      mainGroup.dx(drawingWidth / scalingFactor / 2);
+      //mainGroup.dx(79.2);
+      mainGroup.dy(drawingHeight / scalingFactor / 2);
+
+      console.log(drawingWidth / scalingFactor / 2);
+      console.log(gearSet.width / 2);
+
+      mainGroup.stroke(regularLinesStyle).fill('none');
+
+      gearSet.createGraphics(mainGroup);
+    }
+
+    function exportSvg(gearSet) {
+      // For export we use a separate svg instance that is properly sized in mm.
+      // The viewbox is always in px. 1 mm = 3.543307 px (see https://mpetroff.net/2013/08/analysis-of-svg-units/)
+      var pxPerMillimeter = 3.543307;
+      // We leave some space around the escapement drawing.
+      var borderRatio = 0.05;
+      var border = borderRatio * Math.max(gearSet.width, gearSet.height); 
+      var totalWidth = gearSet.width + 2 * border;
+      var totalHeight = gearSet.height + 2 * border;
+      var drawingForExport = SVG('drawingForExport')
+          .size(totalWidth + 'mm', totalHeight + 'mm')
+          .viewbox(gearSet.left - border, gearSet.top - border, totalWidth, totalHeight); 
+      var topGroup = drawingForExport.group();
+
+      gearSet.createGraphics(topGroup);
+      var exportedSVG = drawingForExport.exportSvg({ whitespace: true });
+      document.getElementById("exportedSVG").value = exportedSVG;
+
+      // based on code from Andreas Köberle (http://stackoverflow.com/questions/10120975/how-to-save-an-svg-generated-by-raphael)
+      var anchor = document.getElementById('downloadSVG');
+      anchor.innerHTML = "Download SVG";
+      anchor.download = 'cycloid_reducer_gear.svg';
+      anchor.type = 'image/svg+xml';
+      
+      // see Eric Bidelman: http://updates.html5rocks.com/2012/06/Don-t-Build-Blobs-Construct-Them
+      var blob = new Blob([exportedSVG], {type: 'image/svg+xml'});
+      anchor.href = (window.URL || webkitURL).createObjectURL(blob);
+    }
+    
+    class RollerGear {
+      constructor(gearSetParams) {
+        this.N = gearSetParams.N; // Number of roller pins
+        this.R = gearSetParams.R; // Roller circle radius
+        this.r = gearSetParams.r; // Roller pin radius 
+        this.center = gearSetParams.center;
+
+        this.rollerCenters = [];
+        for (var i = 0; i < this.N; i++) {
+          var angle = 2 * Math.PI * i / this.N;
+          var dx = this.R * Math.cos(angle);
+          var dy = this.R * Math.sin(angle);
+
+          var rollerCenter = { x: this.center.x + dx, y: this.center.y + dy };
+          this.rollerCenters.push(rollerCenter);
+        }
+      }
+
+      createGraphics(parent, crossMarkerLength) {
+        var helperGroup = parent.group();
+        helperGroup.stroke(helperLinesStyle).fill('none');
+		
+        var regularGroup = parent.group();
+        regularGroup.stroke(regularLinesStyle).fill('none');
+
+        // Roller ring circle
+        helperGroup.circle(2 * this.rollerCircleRadius).cx(this.center.x).cy(this.center.y);
+
+        utilities.drawCross(helperGroup, this.center, crossMarkerLength);
+        for (var i = 0; i < this.N; i++) {
+          var rollerCenter = this.rollerCenters[i];
+          utilities.drawCross(helperGroup, rollerCenter, crossMarkerLength);
+          regularGroup.circle(2 * this.r).cx(rollerCenter.x).cy(rollerCenter.y);
+        }
+      }
+    }
+
+    class CycloidalPlateGear {
+      constructor(gearSetParams) {
+        this.N = gearSetParams.N; // Number of roller pins
+        this.R = gearSetParams.R; // Roller circle radius
+        this.E = gearSetParams.E; // Eccentricity
+        this.r = gearSetParams.r; // Roller pin radius
+        this.pressureAngleLimit = gearSetParams.pressureAngleLimitDegree / 180 * Math.PI;
+        this.addendumFlatteningRatio = gearSetParams.addendumFlatteningRatio;
+        this.dedendumDeepeningRatio = gearSetParams.dedendumDeepeningRatio;
+        this.holeRadius = gearSetParams.holeRadius;
+
+        this.center = {x: gearSetParams.center.x + this.E, y: gearSetParams.center.y};
+
+        this.ren = this.R / this.E / this.N;
+
+        //this.epsilon = 0.00001; // Minimum dPhi
+        this.epsilon = 0.001; // Minimum dPhi
+        this.pressureAngleLimits = this.findPressureAngleLimits();
+
+        this.limitRadii = {
+          // Adjusted addendum
+          ra: this.calcRadius(this.pressureAngleLimits.phiMax),
+          // Adjusted dedendum
+          rd: this.calcRadius(this.pressureAngleLimits.phiMin),
+        };
+        this.points = this.createLobePoints();
+      }
+
+      get eccentricityLimit() {
+        return this.R / this.N;
+      }
+
+      get isValid() {
+        return this.E < this.eccentricityLimit;
+      }
+
+      // Based on http://www.nordtech.ubm.ro/issues/2013/BSSC_v2013_issXXVII_18to22.pdf
+      // 0 <= phi <= pi covers one lobe
+      pressureAngle(phi) {
+        let ex = this.ren;
+        let rg = this.E * this.N;
+      
+        let rho = rg * Math.sqrt(ex * ex + 1 - 2 * ex * Math.cos(phi)) - this.r;
+        let theta = Math.asin((this.R * Math.cos(phi) - rg) / (rho + this.r));
+
+        return theta;
+      }
+
+      findPressureAngleLimits() {
+        let phiLimit1 = this.findPressureAngleLimit(0);
+        let phiLimit2 = this.findPressureAngleLimit(phiLimit1 + this.epsilon);
+        return {
+          phiMin: phiLimit1,
+          phiMinDegress: radToDegree(phiLimit1),
+          phiMax: phiLimit2,
+          phiMaxDegress: radToDegree(phiLimit2),
+        };
+      }
+
+      pressureAngleIsBelowLimit(phi) {
+        let theta = this.pressureAngle(phi);
+        return Math.abs(theta) < this.pressureAngleLimit;
+      }
+
+      findPressureAngleLimit(startPhi) {
+        let phi = startPhi;
+        let dPhi = Math.PI / 100;
+        let theta = this.pressureAngle(phi);
+        let previousIsBelow = this.pressureAngleIsBelowLimit(phi);
+
+        while (Math.abs(dPhi) > this.epsilon) {
+          phi += dPhi;
+          let isBelow = this.pressureAngleIsBelowLimit(phi);
+          if (isBelow != previousIsBelow) {
+            dPhi = -dPhi / 2;
+          }
+          previousIsBelow = isBelow;
+        }
+        return phi;
+      }
+
+      // Based on http://www.nordtech.ubm.ro/issues/2013/BSSC_v2013_issXXVII_18to22.pdf
+      calcRadius(phi) {
+        let ex = this.ren;
+        let rg = this.E * this.N;
+
+        let common = Math.sqrt(this.R * this.R + rg * rg - 2 * this.R * rg * Math.cos(phi));
+        let x = rg - this.E + (common - this.r) * (this.R * Math.cos(phi) - rg) / common;
+        let y = (common - this.r) * this.R * Math.sin(phi) / common;
+        
+        return Math.sqrt(x * x + y * y);
+      }
+
+      createLobePoints() {
+        let points = [];
+
+        let lobeCount = this.N - 1;
+        let anglePerLobe = 2 * Math.PI / lobeCount;
+
+        let phi = 0;
+        let point = this.lobePointAtAngle(phi);
+        points.push(point);
+        let point1Back = point;
+        let point2Back = null;
+
+        let maxCurvature = Math.PI / 90;
+        let maxCurvatureLimitPassed = false;
+
+        let previousPhi = phi;
+        let dPhi = anglePerLobe / 100;
+        while (true) {
+          phi = previousPhi + dPhi;
+          point = this.lobePointAtAngle(phi);
+          point2Back = {x: point.x, y: -point.y};
+
+          var curv = curvatureAngle(point2Back, point1Back, point);
+          console.log(radToDegree(dPhi) + ': ' + radToDegree(curv));
+
+          // Increase until curvature is above the allowed limit; then decrease until it is
+          // below the limit
+          if (!maxCurvatureLimitPassed && curv > maxCurvature) {
+            maxCurvatureLimitPassed = true;
+          }
+
+          if (!maxCurvatureLimitPassed) {
+            dPhi = dPhi * 2;
+          } else {
+            if (curv < maxCurvature || dPhi < this.epsilon) {
+              break;
+            } else {
+              dPhi = dPhi / 2;
+            }
+          }
+        }
+
+        // We found the second point
+        while (phi < anglePerLobe / 2) {
+          point2Back = point1Back;
+          point1Back = point;
+          points.push(point);
+
+          let result = this.findNextLobePoint(phi, dPhi, point2Back, point1Back, maxCurvature);
+          phi = result.phi;
+          dPhi = result.dPhi;
+          point = result.point;
+        }
+
+        // We completed half a lobe. Mirror along the half lobe line to get the second half.
+        for (let i = points.length - 1; i > 0; i--) {
+          let point = points[i];
+          let pointPolar = toPolar(point);
+
+          let mirroredTheta = -anglePerLobe - pointPolar.theta;
+          let mirroredPoint = fromPolar({r: pointPolar.r, theta: mirroredTheta});
+          points.push(mirroredPoint)
+        }
+
+        // Add rotated copies for each lobe
+        let lobePointCount = points.length;
+        for (let lobe = 1; lobe < lobeCount; lobe++) {
+          let lobeStartAngle = lobe * anglePerLobe;
+          for (let i = 0; i < lobePointCount; i++) {
+            let point = points[i];
+            let pointPolar = toPolar(point);
+
+            let rotatedTheta = -lobeStartAngle + pointPolar.theta;
+            let rotatedPoint = fromPolar({r: pointPolar.r, theta: rotatedTheta});
+            points.push(rotatedPoint)
+          }
+        }
+
+        // Offset each point by the eccentricity
+        for (let i = 0; i < points.length; i++) {
+          points[i].x = points[i].x + this.E;
+        }
+
+        return points;
+      }
+
+      lobePointAtAngle(phi) {
+        let phi1 = (1 - this.N)*phi;
+        let psi = Math.atan(Math.sin(phi1) / (this.ren - Math.cos(phi1)));
+
+        let point = {
+          x: this.R * Math.cos(phi) - this.r * Math.cos(phi + psi) - this.E * Math.cos(this.N * phi),
+          y: -this.R * Math.sin(phi) + this.r * Math.sin(phi + psi) + this.E * Math.sin(this.N * phi)
+        };
+
+        let pointPolar = toPolar(point);
+        let deltaRa = pointPolar.r - this.limitRadii.ra; // distance from addendum limit radius
+        let deltaRd = this.limitRadii.rd - pointPolar.r; // distance from dedendum limit radius
+        if (deltaRa > 0) {
+          let polarAdjusted = {
+            r: pointPolar.r - deltaRa * this.addendumFlatteningRatio,
+            theta: pointPolar.theta
+          }
+          point = fromPolar(polarAdjusted);
+        } 
+        if (deltaRd > 0) {
+          let polarAdjusted = {
+            r: pointPolar.r - deltaRd * this.dedendumDeepeningRatio,
+            theta: pointPolar.theta
+          }
+          point = fromPolar(polarAdjusted);
+        }
+        return point;
+      }
+
+      findNextLobePoint(previousPhi, dPhi, point2Back, point1Back, maxCurvature) {
+        let maxCurvatureLimitPassed = false;
+        let phi = null;
+        let point = null;
+
+        while (true) {
+          phi = previousPhi + dPhi;
+          point = this.lobePointAtAngle(phi);
+
+          var curv = curvatureAngle(point2Back, point1Back, point);
+          console.log(radToDegree(dPhi) + ': ' + radToDegree(curv));
+
+          // Increase until curvature is above the allowed limit; then decrease until it is
+          // below the limit
+          if (!maxCurvatureLimitPassed && curv > maxCurvature) {
+            maxCurvatureLimitPassed = true;
+          }
+
+          if (!maxCurvatureLimitPassed) {
+            dPhi = dPhi * 2;
+          } else {
+            if (curv < maxCurvature || dPhi < this.epsilon) {
+              break;
+            } else {
+              dPhi = dPhi / 2;
+            }
+          }
+        }
+        return {phi: phi, dPhi: dPhi, point: point};
+      }
+
+      createGraphics(parent, crossMarkerLength) {
+        var helperGroup = parent.group();
+        helperGroup.stroke(helperLinesStyle).fill('none');
+
+        utilities.drawCross(helperGroup, this.center, crossMarkerLength);
+        helperGroup.circle(2 * this.limitRadii.ra).cx(this.center.x).cy(this.center.y);
+        helperGroup.circle(2 * this.limitRadii.rd).cx(this.center.x).cy(this.center.y);
+
+        var regularGroup = parent.group();
+        regularGroup.stroke(regularLinesStyle).fill('none');
+        
+        regularGroup.circle(2 * this.holeRadius).cx(this.center.x).cy(this.center.y);
+
+        insertPath(regularGroup, this.points, true);
+        let showPoints = false;
+        if (showPoints) {
+          var pointRadius = this.r / 10; 
+          for (var i = 0; i < this.points.length; i++) {
+            var point = this.points[i];
+            regularGroup.circle(2 * pointRadius).cx(point.x).cy(point.y);
+          }
+        }
+      }   
+    }
+ 
+    class GearSet {
+      constructor(gearSetParams) {
+        this.center = gearSetParams.center;
+
+        this.width = 2 * (gearSetParams.R + gearSetParams.r);
+        this.height = this.width;
+        this.left = -this.width / 2;
+        this.top = -this.height / 2;
+
+        this.speedRatio = 1 / (1 - gearSetParams.N);
+
+        this.rollerGear = new RollerGear(gearSetParams);
+        this.cycloidalPlateGear = new CycloidalPlateGear(gearSetParams);
+      }
+
+      get eccentricityLimit() {
+        return this.cycloidalPlateGear.eccentricityLimit;
+      }
+
+      get isValid() {
+        return this.cycloidalPlateGear.isValid;
+      }
+
+      createGraphics(parentGroup) {
+        var crossMarkerLength = this.rollerGear.r * 1.1;
+        this.rollerGear.createGraphics(parentGroup, crossMarkerLength);
+        this.cycloidalPlateGear.createGraphics(parentGroup, crossMarkerLength);
+      }
+    }
+
+    function radToDegree(angle) {
+      return angle / Math.PI * 180;
+    }
+
+    function angleBetweenVectors(v1, v2) {
+      var dotProduct = v1.x * v2.x + v1.y * v2.y;
+      return Math.acos(dotProduct / Math.sqrt(lengthSquared(v1) * lengthSquared(v2)));
+    }
+
+    // The angle describing how much the two vectors p0 - p1 and p2 - p1 deviate from a straigt line. 
+    function curvatureAngle(p0, p1, p2) {
+      var v1 = {x: p0.x - p1.x, y: p0.y - p1.y};
+      var v2 = {x: p2.x - p1.x, y: p2.y - p1.y};
+
+      var theta = angleBetweenVectors(v1, v2);
+      var curv = Math.PI - theta;
+      console.log('theta: ' + radToDegree(theta) + ' curv: ' + radToDegree(curv));
+
+      return curv;
+    }
+
+    // Squared length of 2d vector
+    function lengthSquared(v) {
+      return v.x * v.x + v.y * v.y;
+    }
+
+    // Length of 2d vector
+    function length(v) {
+      return Math.sqrt(v.x * v.x + v.y * v.y);
+    }
+
+    function distance(p1, p2) {
+      return length({x: p1.x - p2.x, y: p1.y - p2.y});
+    }
+
+    function toPolar(v) {
+      return {
+        r: length(v),
+        theta: Math.atan2(v.y, v.x)
+      }
+    }
+
+    function fromPolar(p) {
+      return {
+        x: p.r * Math.cos(p.theta),
+        y: p.r * Math.sin(p.theta)
+      }
+    }
+
+    // Utilities
+    var Utilities = (function () {
+      function Utilities() {
+      }
+      Utilities.prototype.drawCrosses = function(parent, points, length) {
+        for (var i = 0; i < points.length; i++) {
+          this._drawCross(parent, points[i], length);
+        }
+      }
+      Utilities.prototype.drawCross = function(parent, point, length) {
+        var halfLength = length / 2;
+        parent.line(point.x, point.y - halfLength, point.x, point.y + halfLength).stroke(markerLinesStyle);
+        parent.line(point.x - halfLength, point.y, point.x + halfLength, point.y).stroke(markerLinesStyle);
+      }
+      return Utilities;
+    })();
+
+    // Converts array of {x:..., y:...} points into an SVG paths.
+    function insertPath(group, points, isClosed = true) {
+      var svgPath = group.path();
+      for (var i = 0; i < points.length; i++) {
+        var point = points[i];
+        if (i == 0) {
+          svgPath.M(point);
+        } else {
+          svgPath.L(point);
+        }
+      }
+      if (isClosed) {
+        svgPath.Z();
+      }
+    }
+  </script>
+  </head>
+  <body onload="onload()">
+    <h1>Cycloid Reducer Gear Builder <span style="font-size:10px">(C) 2019 Dr. Rainer Hessmer</span></h1>
+    <p>This is an open source online tool that generates hypocycloid gear drawings inspired by <a href="http://www.zincland.com/hypocycloid/">http://www.zincland.com/hypocycloid/</a></p>
+    <p>The lobe equations are based on the paper <a href="https://ww3.cad.de/foren/ubb/uploads/Clayton/lobe_profile_design_cycloid_reducer.pdf">
+        'On the lobe profile design in a cycloid reducer using instant velocity center'</a> by Joong-Ho Shin, Soon-Man Kwon.</p>
+    <p>For the derivation of the pressure angle calculations see <a href="https://imt.uoradea.ro/auo.fmte/files-2007/MECATRONICA_files/Anamaria_Dascalescu_1.pdf">
+      The Determination of the Cycloid Profile limits of the Cycloid Reducer Satellite Gear</a> by Anamaria DĂSCĂLESCU.</p>
+    <p>The page runs in modern browsers with SVG support (if in doubt, use <a href="https://www.google.com/chrome/browser">Chrome</a>).
+       The generated SVG drawing can be downloaded and imported in CAD applications or opened in the open source SVG editor 
+       <a href="http://www.inkscape.org/">Inkscape</a> to export as dxf or other formats.</p>
+    <div id="parametersblock" class="parametersdiv">
+      <b>Parameters</b> (svg output assumes inputs in millimeters)
+      <div id="parameters"></div>
+      <input id="update" type="button" value="update" onclick="update()" />
+    </div>
+    <p><div id="svgcontainer"></div></p>
+    <p><div id="drawing" class="svgdiv"></div></p>
+    <p><a id="downloadSVG">place holder</a></p>
+    <div id="drawingForExport" style="display: none" ></div>
+    <p><textarea id="exportedSVG" rows="2"></textarea></p>
+
+    <h2>License and Credits</h2>
+    <ul>
+        <li>The application itself, as well as the application specific source code is copyright (c) 2019 by Dr. Rainer Hessmer and is covered by the permissive MIT license.</li>
+        <li>This page leverages <a href="http://svgjs.com/">svg.js</a> with plug-ins <a href="https://github.com/wout/svg.export.js">svg.export.js</a>, <a href="https://github.com/otm/svg.path.js">svg.path.js</a>, <a href="http://jillix.github.io/svg.pan-zoom.js/">svg.pan-zoom.js</a>.</li>
+    </ul>
+  </body>
+</html>
