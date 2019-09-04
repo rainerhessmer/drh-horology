@@ -62,9 +62,10 @@
         { name: 'forkToothSpanCount', caption: 'Number of full teeth spanned by the fork:', type: 'int', initial: 7 },
         { name: 'forkLockAngle', caption: 'Lock angle (degrees):', type: 'float', initial: 1 },
         { name: 'forkDropAngle', caption: 'Drop angle (degrees); must be greater than the central angle of a tooth:', type: 'float', initial: 1.5 },
-        { name: 'forkLiftAngle', caption: 'Lift angle (degrees):', type: 'float', initial: 2 },
+        { name: 'forkLiftAngle', caption: 'Lift angle (degrees):', type: 'float', initial: 4.897 },
         { name: 'forkArmClearanceAngle', caption: 'Clearance angle of the arm (degrees):', type: 'float', initial: 10 },
         { name: 'forkAxleDiameter', caption: 'Axle diamater of the fork:', type: 'float', initial: 8 },
+        { name: 'forkWheelDistance', caption: 'Distance between escapement wheel axle center and fork axle center:', type: 'float', isCalculated: true },
         { name: 'impulseFaceAngle', caption: 'Impulse face angle (degree) should be close to 0 (controlled by lift angle):', type: 'float', isCalculated: true },
       ];
     }
@@ -369,6 +370,18 @@
         this.DnPrime = rotate(this.Dn, this.center, -this.lockAngle);
 
         this.impulseFaceAngle = -Math.atan2(this.DnPrime.y - this.CnPrime.y, this.DnPrime.x - this.CnPrime.x);
+
+        var pointStraightAboveCenter = {
+          x: this.center.x,
+          y: this.center.y - this.outerRadius
+        }
+        var pointStraightBelowCenter = {
+          x: this.center.x,
+          y: this.center.y + this.outerRadius
+        }
+        // The center ray goes through the center of the fork axle and symmetrically bisects the fork
+        this.centerRayStart = rotate(pointStraightBelowCenter, this.center, this.lockAngle / 2);
+        this.centerRayEnd = rotate(pointStraightAboveCenter, this.center, this.lockAngle / 2);
       }
 
       createGraphics(parent, crossMarkerLength) {
@@ -398,9 +411,10 @@
         utilities.drawCross(helperGroup, this.Lx, crossMarkerLength);
         utilities.drawCross(helperGroup, this.Qx, crossMarkerLength);
 
-        regularGroup.circle(this.axleRadius).cx(this.center.x).cy(this.center.y);
+        // Center ray
+        helperGroup.line(this.centerRayStart.x, this.centerRayStart.y, this.centerRayEnd.x, this.centerRayEnd.y);
 
-        //helperGroup.line(this.center.x, this.center.y, this.Qx.x, this.Qx.y).stroke(markerLinesStyle);
+        regularGroup.circle(this.axleRadius).cx(this.center.x).cy(this.center.y);
 
         this.drawFork(regularGroup);
 
@@ -424,15 +438,22 @@
  
     class DeadbeatEscapement {
       constructor(escapementParams) {
-        this.center = escapementParams.center;
+        this.escapementWheel = new EscapementWheel(escapementParams);
+        this.fork = new Fork(this.escapementWheel, escapementParams);
 
-        this.width = escapementParams.eswTipDiameter;
-        this.height = this.width;
+        this.width = 2 * this.escapementWheel.tipRadius;
+        this.height = this.escapementWheel.tipRadius + this.forkWheelDistance;
         this.left = -this.width / 2;
         this.top = -this.height / 2;
 
-        this.escapementWheel = new EscapementWheel(escapementParams);
-        this.fork = new Fork(this.escapementWheel, escapementParams);
+        this.center = {
+          x: 0,
+          y: -(this.forkWheelDistance - this.escapementWheel.tipRadius) / 2
+        };
+      }
+
+      get forkWheelDistance() {
+        return this.fork.forkWheelDistance;
       }
 
       get impulseFaceAngle() {
@@ -614,6 +635,7 @@
     <p>This is an open source online tool that generates deadbeat escapements (Grahem escapements) based on
       <a href="https://www.ocf.berkeley.edu/~wwu/cgi-bin/yabb/YaBB.cgi?board=riddles_general;action=display;num=1437253052">Mechanical Pendulum Gear Clocks</a>
       by rloginunix</p>
+    <p><b>Note:</b> Tweak the lift angle until the impulse face angle is close to 0 to get maximum energy transfer.</p>
     <p>The page runs in modern browsers with SVG support (if in doubt, use <a href="https://www.google.com/chrome/browser">Chrome</a>).
        The generated SVG drawing can be downloaded and imported in CAD applications or opened in the open source SVG editor 
        <a href="http://www.inkscape.org/">Inkscape</a> to export as dxf or other formats.</p>
