@@ -1,0 +1,4 @@
+ cd ~/Documents/GitHub/drh-horology/svg
+ python3 -m http.server
+
+ http://localhost:8000/InvoluteSpurGearBuilderSVG.html

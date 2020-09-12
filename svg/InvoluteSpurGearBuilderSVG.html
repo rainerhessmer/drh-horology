@@ -48,9 +48,9 @@
     window.addEventListener("load", onLoad);
     document.querySelector('#update').addEventListener('click', update)
 
-    
     const ORIGIN = {X: 0, Y: 0};
-    const SCALE_OUT = 10000;
+    const CLIPPER_SCALE = 100000;
+    const CLIPPER_LIGHTEN_FACTOR = 0.001;
 
     var drawingWidth;
     var drawingHeight;
@@ -58,12 +58,6 @@
     var drawing;
     var mainGroup;
     var parameters;
-
-    var GearType = {
-      Regular: 0,
-      Internal: 1,
-      Rack: 2
-    };
 
     function getParameterDefinitions() {
       return [
@@ -74,9 +68,11 @@
         { name: 'profileShift', caption: 'Profile Shift (indicates what portion of gear one\'s addendum height should be shifted to gear two. E.g., a value of 0.1 means the adddendum of gear two is increased by a factor of 1.1 while the height of the addendum of gear one is reduced to 0.9 of its normal height):', type: 'float', initial: 0.0 },
         { name: 'gear1ToothCount', caption: 'Gear 1 Tooth Count (n1 > 0: external gear; n1 = 0: rack; n1 < 0: internal gear):', type: 'int', initial: 30 },
         { name: 'gear1PitchDiameter', caption: 'Gear 1 Pitch Circle Diameter', type: 'float', isCalculated: true },
+        { name: 'gear1OuterDiameter', caption: 'Gear 1 Outer Circle Diameter', type: 'float', isCalculated: true },
         { name: 'gear1CenterHoleDiamater', caption: 'Gear 1 Center Hole Diameter (0 for no hole):', type: 'float', initial: 4 },
         { name: 'gear2ToothCount', caption: 'Gear 2 Tooth Count:', type: 'int', initial: 8 },
         { name: 'gear2PitchDiameter', caption: 'Gear 2 Pitch Circle Diameter', type: 'float', isCalculated: true },
+        { name: 'gear2OuterDiameter', caption: 'Gear 2 Outer Circle Diameter', type: 'float', isCalculated: true },
         { name: 'gear2CenterHoleDiamater', caption: 'Gear 2 Center Hole Diameter (0 for no hole):', type: 'float', initial: 4 },
         { name: 'gearCentersDistance', caption: 'Gear Centers Distance', type: 'float', isCalculated: true },
         { name: 'showOption', caption: 'Show:', type: 'choice', values: [3, 1, 2], initial: 3, captions: ["Gear 1 and 2", "Gear 1 Only", "Gear 2 Only"]},
@@ -85,12 +81,17 @@
 
     var helperLinesStyle = {
       color: 'blue',
-      width: 0.02
+      width: 0.005
+    };
+
+    var helperLinesStyle2 = {
+      color: 'green',
+      width: 0.005
     };
 
     var markerLinesStyle = {
       color: 'red',
-      width: 0.02
+      width: 0.005
     };
 
     var regularLinesStyle = {
@@ -99,12 +100,12 @@
     };
 
     var regularLinesStyle2 = {
-      color: 'green',
-      width: 0.1
+      color: 'red',
+      width: 0.02
     };
 
     function onLoad() {
-      var drawingDiv = document.getElementById('drawing');
+      let drawingDiv = document.getElementById('drawing');
       drawingWidth = 800;
       drawingHeight = 800;
       drawingDiv.style.width = drawingWidth + 'px';
@@ -151,11 +152,10 @@
       var scalingFactor = Math.min(drawingWidth / totalWidth, drawingHeight / totalHeight);
       mainGroup = topGroup.group().scale(scalingFactor, scalingFactor).x(-gearSet.center.X).y(-gearSet.center.Y);
       mainGroup.dx(drawingWidth / scalingFactor / 2);
-      //mainGroup.dx(79.2);
       mainGroup.dy(drawingHeight / scalingFactor / 2);
 
-      console.log(drawingWidth / scalingFactor / 2);
-      console.log(gearSet.width / 2);
+      //console.log(drawingWidth / scalingFactor / 2);
+      //console.log(gearSet.width / 2);
 
       mainGroup.stroke(regularLinesStyle).fill('none');
 
@@ -183,7 +183,7 @@
       // based on code from Andreas Köberle (http://stackoverflow.com/questions/10120975/how-to-save-an-svg-generated-by-raphael)
       let anchor = document.getElementById('downloadSVG');
       anchor.innerHTML = 'Download SVG';
-      anchor.download = 'lantern_gear.svg';
+      anchor.download =`involute_gear_${gearSet.gear1.toothCount}_to_${gearSet.gear2.toothCount}.svg`;
       anchor.type = 'image/svg+xml';
       
       // see Eric Bidelman: http://updates.html5rocks.com/2012/06/Don-t-Build-Blobs-Construct-Them
@@ -207,6 +207,7 @@
           this.profileShift
         );
         this.gear2PitchDiameter = this.gear2.pitchDiameter;
+        this.gear2OuterDiameter = 2 * this.gear2.outerRadius;
 
         if (this.gear1ToothCount == 0) {
           // Create rack
@@ -215,6 +216,8 @@
             -this.profileShift
           );
           this.gear1PitchDiameter = 0;
+          this.gear1OuterDiameter = 0;
+          this.gearCentersDistance = 0;
         }
 
         if (this.gear1ToothCount > 0) {
@@ -230,6 +233,8 @@
             -this.profileShift
           );
           this.gear1PitchDiameter = this.gear1.pitchDiameter;
+          this.gear1OuterDiameter = 2 * this.gear1.outerRadius;
+          this.gearCentersDistance = this.gear1.pitchRadius + this.gear2.pitchRadius;
         }
 
         if (this.gear1ToothCount < 0) {
@@ -244,6 +249,8 @@
             -this.profileShift
           );
           this.gear1PitchDiameter = this.gear1.pitchDiameter;
+          this.gear1OuterDiameter = 2 * this.gear1.outerRadius;
+          this.gearCentersDistance = this.gear1.pitchRadius - this.gear2.pitchRadius;
         }
 
         this.gear1.connectedGear = this.gear2;
@@ -288,13 +295,13 @@
 
       createGraphics(parent) {
         let crossMarkerLength = Math.min(this.circularPitch / 2, this.width / 50);
-        if ((this.showOption & 1) > 0) {
-          // show gear 1
-          this.gear1.createGraphics(parent, crossMarkerLength);
-        }
         if ((this.showOption & 2) > 0) {
           // show gear 2
           this.gear2.createGraphics(parent, crossMarkerLength);
+        }
+        if ((this.showOption & 1) > 0) {
+          // show gear 1
+          this.gear1.createGraphics(parent, crossMarkerLength);
         }
       }
     }
@@ -352,7 +359,7 @@
         //let {cutterPath, lowerLeftCorner} = this.createToothCutter();
         //insertSvgPath(regularGroup, cutterPath, /* isClosed=*/true);
 
-        //let toothSectorPath = this._createToothSectorPath();
+        //let toothSectorPath = this.createToothSectorPath();
         //insertSvgPath(regularGroup, toothSectorPath, /* isClosed=*/true);
 
         //let {cutterPaths, lowerLeftCornerIndex} = this.createToothCutterPaths();
@@ -378,7 +385,7 @@
         gearGroup.move(this.center.X, this.center.Y);
       }
 
-      _createToothSectorPath() {
+      createToothSectorPath() {
         // create outer circle sector covering one tooth
         return [
           ORIGIN,
@@ -396,11 +403,11 @@
           // rotate counter clockwise so that the starter tooth points east.
           angleOffset = -Math.PI / 2 - this.angleToothToTooth / 2;
         } else {
-          // rotoate clock wise so that the starter tooth meshes with the left gear.
+          // rotate clock wise so that the starter tooth meshes with the left gear.
           angleOffset = Math.PI / 2 - this.angleToothToTooth;
         }
 
-        for (var i = 0; i < this.toothCount; i++) {
+        for (let i = 0; i < this.toothCount; i++) {
           let angle = i * this.angleToothToTooth + angleOffset;
           let rotatedToothPoints = rotatePointsAroundCenter(this.toothPointsTemplate, ORIGIN, angle);
 
@@ -427,7 +434,7 @@
 
         let toothPath = [];
         // Add mirrored half tooth
-        for (var i = halfToothPath.length - 1; i > 0; i--) {
+        for (let i = halfToothPath.length - 1; i > 0; i--) {
           let point = halfToothPath[i];
           toothPath.push(createPoint(-point.X, point.Y));
         }
@@ -456,7 +463,7 @@
           halfPointOnCircle,
           tangentIntercept
         ];
-        ClipperLib.JS.ScaleUpPath(intersectPath, SCALE_OUT);
+        ClipperLib.JS.ScaleUpPath(intersectPath,  CLIPPER_SCALE);
 
         var clipper = new ClipperLib.Clipper();
         clipper.AddPath(toothCutoutPath, ClipperLib.PolyType.ptSubject, true);  // true means closed path;
@@ -465,14 +472,14 @@
         let solutionPaths = new ClipperLib.Paths();
         var succeeded = clipper.Execute(ClipperLib.ClipType.ctIntersection, solutionPaths, ClipperLib.PolyFillType.pftNonZero, ClipperLib.PolyFillType.pftNonZero);
 
-        let lightenedPaths = ClipperLib.JS.Lighten(solutionPaths[0], 0.007 * SCALE_OUT);
+        let lightenedPaths = ClipperLib.JS.Lighten(solutionPaths[0], CLIPPER_LIGHTEN_FACTOR * CLIPPER_SCALE);
         var clippedToothCutoutPath = lightenedPaths[0];
 
-        ClipperLib.JS.ScaleDownPath(clippedToothCutoutPath, SCALE_OUT);
+        ClipperLib.JS.ScaleDownPath(clippedToothCutoutPath, CLIPPER_SCALE);
 
         // Find dedendum start point at x == 0;
         let dedendumStartIndex = clippedToothCutoutPath.findIndex((point) => Math.abs(point.X) < 0.01 * this.addendum && point.Y < this.pitchRadius);
-        console.log("dedendumStartIndex: ", dedendumStartIndex);
+        //console.log("dedendumStartIndex: ", dedendumStartIndex);
 
         // Start from the dedendumStartIndex and iterate over all points until the next point is outside of the outer radius.
         let halfToothPath = [clippedToothCutoutPath[dedendumStartIndex]];
@@ -511,12 +518,12 @@
 
         // Also create a path from one of the addendum corners to get smooth undercut curves.
         let cornersPath = [];
-        cutterPaths.forEach(toothCutterPath => cornersPath.push(copyPoint(toothCutterPath[lowerLeftCornerIndex])));
+        cutterPaths.forEach(toothCutterPath => cornersPath.push(clonePoint(toothCutterPath[lowerLeftCornerIndex])));
         cutterPaths.push(cornersPath);
 
         var clipper = new ClipperLib.Clipper();
         cutterPaths.forEach(path => {
-          ClipperLib.JS.ScaleUpPath(path, SCALE_OUT);
+          ClipperLib.JS.ScaleUpPath(path,  CLIPPER_SCALE);
           clipper.AddPath(path, ClipperLib.PolyType.ptSubject, true);  // true means closed path;
         });
 
@@ -533,9 +540,9 @@
         let cutterPaths = [cutterPath];
         
         // To create the tooth profile we move the (virtual) infinite gear and then turn the resulting cutter position back. 
-        // For illustration see http://lcamtuf.coredump.cx/gcnc/ch6/, section 'Putting it all together'
+        // For illustration see http://lcamtuf.coredump.cx/gcnc/ch6/, section 'Putting it all together'.
         // We continue until the moved tooth cutter's lower left corner is outside of the outer circle of the gear.
-        // Going any further will no longer influence the shape of the tooth
+        // Going any further will no longer influence the shape of the tooth.
         var stepCounter = 0;
         while (true) {
           let angle = stepCounter * angleStepSize;
@@ -590,8 +597,6 @@
         // If a positive backlash is defined then we widen the trapezoid accordingly.
         // Each side of the tooth needs to widened by a fourth of the backlash (vertical to cutter faces).
         let dx = this.gearSet.backlash / 4 / cosPressureAngle;
-        //console.log("backlash: " + this.backlash);
-        //console.log("dx: " + dx);
 
         // Create the cutout at 6 o'clock position pointing upwards
         let yBottom = this.pitchRadius + this.profileShift * this.addendum - cutterDepth;
@@ -629,8 +634,12 @@
         // Typically no profile shift is used meaning that this.shiftedAddendum = this.addendum 
         this.shiftedAddendum = this.addendum * (1 + this.profileShift);
 
-        // Inner Circle
+        // Inner Circle (addendum)
         this.innerRadius = this.pitchRadius - this.shiftedAddendum;
+
+        // Dedendum Circle
+        this.dedendumRadius = this.pitchRadius + this.shiftedAddendum;
+
         this.angleToothToTooth = degreeToRad(360 / this.toothCount);
 
         // Outer circle; just a circle that is greater than the dedendum circle.
@@ -641,26 +650,359 @@
         this.topLeft = addVectors(createPoint(-this.outerRadius, this.outerRadius), this.center);
         this.lowerRight = addVectors(createPoint(this.outerRadius, -this.outerRadius), this.center);
 
-        //this.toothPointsTemplate = this.createToothPath();
+        this.pinion = this.connectedGear;
+        this.toothPointsTemplate = this.createToothPath();
+        //this.pinionCenter = createPoint(this.pitchRadius - this.pinion.pitchRadius, 0);
       }
 
       createGraphics(parent, crossMarkerLength) {
-        var gearGroup = parent.group();
-        var helperGroup = gearGroup.group();
+        let gearGroup = parent.group();
+        let helperGroup = gearGroup.group();
         helperGroup.stroke(helperLinesStyle).fill('none');
-        // Inner circle
+        // Inner circle (addendum)
         drawCircle(helperGroup, ORIGIN, this.innerRadius);
         // Pitch circle
         drawCircle(helperGroup, ORIGIN, this.pitchRadius);
+        // Dedendum circle
+        drawCircle(helperGroup, ORIGIN, this.dedendumRadius);
         // Outer circle
         drawCircle(helperGroup, ORIGIN, this.outerRadius);
 
         drawCross(helperGroup, ORIGIN, crossMarkerLength);
 
-        var regularGroup = gearGroup.group();
-        regularGroup.stroke(regularLinesStyle).fill('none');
+        //let zeroedHalfCutterPath = this.createZeroedHalfToothCutterPath();
+        //insertSvgPath(helperGroup, zeroedHalfCutterPath, true);
+
+        //let halfToothSectorPath = this.createHalfToothSectorPath();
+        //insertSvgPath(helperGroup, halfToothSectorPath, /* isClosed=*/true);
+
+        let regularGroup = gearGroup.group();
+        regularGroup.stroke(regularLinesStyle2).fill('none');
+
+        //let halfToothPath = this.createEnlargedPinionHalfToothPath();
+        //insertSvgPath(regularGroup, halfToothPath, /* isClosed=*/false);
+
+        //let zeroedCutterPath = this.createZeroedCutterPath();
+        //insertSvgPath(regularGroup, zeroedCutterPath, false);
+
+        let helperGroup2 = gearGroup.group();
+        helperGroup2.stroke(helperLinesStyle2).fill('none');
+        
+        //let zeroedHalfCutterPath = this.createZeroedHalfToothCutterPath();
+        //insertSvgPath(helperGroup2, zeroedHalfCutterPath, true);
+
+        let halfToothSectorPath = this.createHalfToothSectorPath();
+        insertSvgPath(helperGroup2, halfToothSectorPath, true);
+
+        //let cutterPaths = this.createHalfToothCutterPaths(zeroedHalfCutterPath);
+        //cutterPaths.forEach(path => insertSvgPath(helperGroup2, path, true));
+
+        //let cornersPaths = this.createCornersPaths(cutterPaths);
+        //cornersPaths.forEach(path => insertSvgPath(helperGroup, path, true));
+
+        let markerGroup = gearGroup.group();
+        markerGroup.stroke(markerLinesStyle).fill('none');
+
+        /*
+        cornersPaths.forEach(path => {
+          drawCircle(markerGroup, path[0], 0.01);
+          drawCircle(markerGroup, path.slice(-1)[0], 0.01);
+        });
+        cornersPaths[0].slice(0,5).forEach(point => {
+          drawCircle(markerGroup, point, 0.01);
+        });
+        */
+
+        //let edgesPath = this.createEdgesPath(cutterPaths);
+        //insertSvgPath(markerGroup, edgesPath, true);
+        //drawCircles(markerGroup, edgesPath, 0.02);
+
+        //let halfToothPath = this.createHalfToothPath();
+        //insertSvgPath(markerGroup, halfToothPath, false);
+        //drawCircle(markerGroup, halfToothPath[0], 0.01);
+        //drawCircle(markerGroup, halfToothPath.slice(-1)[0], 0.01);
+
+        //let toothPath = this.createToothPath();
+        //insertSvgPath(markerGroup, this.toothPointsTemplate, false);
+
+        this.insertGearSvgPath(regularGroup);
 
         gearGroup.move(this.center.X, this.center.Y);
+      }
+
+      insertGearSvgPath(group) {
+        let svgPath = group.path();
+
+        let firstSvgPoint;
+        for (let i = 0; i < this.toothCount; i++) {
+          let angle = -i * this.angleToothToTooth;
+          let rotatedToothPoints = rotatePointsAroundCenter(this.toothPointsTemplate, ORIGIN, angle);
+
+          if (i == 0) {
+            addLineSegmentsToPath(svgPath, rotatedToothPoints, /*moveToFirst=*/ true);
+            firstSvgPoint = createSvgPoint(rotatedToothPoints[0]);
+          } else {
+            // connect the previous last point with an arc to the new, rotated tooth points.
+            svgPath.A(this.outerRadius, this.outerRadius, 0, 0, 1, createSvgPoint(rotatedToothPoints[0]));
+            addLineSegmentsToPath(svgPath, rotatedToothPoints.slice(1));
+          }
+        }
+
+        // Close the path by connecting the final arc.
+        svgPath.A(this.outerRadius, this.outerRadius, 0, 0, 1, firstSvgPoint);
+        // Close the path
+        svgPath.Z();
+
+        return svgPath;
+      }
+
+      createHalfToothSectorPath() {
+        // create outer circle sector covering half a tooth
+        return [
+          ORIGIN,
+          createPoint(this.outerRadius, 0),
+          rotatePointAroundCenter(createPoint(this.outerRadius, 0), ORIGIN, -this.angleToothToTooth / 2)
+        ];
+      }
+
+      createCornersPaths(cutterPaths) {
+        // Create a paths from each of the corners to avoid ragged edges.
+        let cornersPaths = [];
+        // Ignore the last point which is always the origin.
+        for (let i = 0; i < cutterPaths[0].length - 1; i++) {
+          let cornersPath = [];
+          cutterPaths.forEach(cutterPath => cornersPath.push(clonePoint(cutterPath[i])));
+          cornersPaths.push(cornersPath);
+        }
+
+        return cornersPaths;
+      }
+
+      createEdgesPath(cutterPaths) {
+        // This step is described in the accompanying pdf doc.
+        // Conceptually, first we create shapes by connecting correponding points from the various cutter paths.
+        // Then we connect the top most endpoints of these shapes.
+        // Finally we add the top half of the rightmost shape.
+
+        // Create a paths from each of the corners to avoid ragged edges.
+        let edgesPath = [ORIGIN];
+        // Ignore the last point which is always the origin.
+        for (let i = cutterPaths[0].length - 1; i > 0; i--) {
+          let endPoint1 = cutterPaths[0][i];
+          let endPoint2 = cutterPaths.slice(-1)[0][i];
+
+          if (endPoint1.Y < endPoint2.Y) {
+            edgesPath.push(clonePoint(endPoint1));
+          } else {
+            edgesPath.push(clonePoint(endPoint2));
+          }
+        }
+
+        // Add the top half of the points of the rightmost shape.
+        for (let i = 0; i < (cutterPaths.length + 1) / 2; i++) {
+          edgesPath.push(clonePoint(cutterPaths[i][0]));
+        }
+        
+        return edgesPath;
+      }
+
+      createToothPath() {
+        let halfToothPath = this.createHalfToothPath();
+        let rotatedHalfToothPath = rotatePointsAroundCenter(halfToothPath, ORIGIN, this.angleToothToTooth / 2);
+
+        let toothPath = [...rotatedHalfToothPath];
+        // Add mirrored half tooth
+        for (let i = rotatedHalfToothPath.length - 1; i > 0; i--) {
+          let point = rotatedHalfToothPath[i];
+          toothPath.push(createPoint(point.X, -point.Y));
+        }
+
+        return toothPath;      }
+
+      createHalfToothPath() {
+        let zeroedHalfCutterPath = this.createZeroedHalfToothCutterPath();
+        let cutterPaths = this.createHalfToothCutterPaths(zeroedHalfCutterPath);
+        // Also create a paths from each of the corners to avoid ragged edges.
+        let cornersPaths = this.createCornersPaths(cutterPaths);
+        let edgesPath = this.createEdgesPath(cutterPaths);
+        let halfToothSectorPath = this.createHalfToothSectorPath();
+
+        // Scale them all up to prepare for union and interesction operations.
+        cutterPaths.forEach(path => {
+          ClipperLib.JS.ScaleUpPath(path, CLIPPER_SCALE);
+        });
+        cornersPaths.forEach(path => {
+          ClipperLib.JS.ScaleUpPath(path, CLIPPER_SCALE);
+        });
+        ClipperLib.JS.ScaleUpPath(edgesPath, CLIPPER_SCALE);
+        // The edges path often self intersects. If needed split into non-intersecting paths.
+        let nonIntersectingEdgesPaths = ClipperLib.Clipper.SimplifyPolygon(edgesPath, ClipperLib.PolyFillType.pftNonZero);
+        ClipperLib.JS.ScaleUpPath(halfToothSectorPath, CLIPPER_SCALE);
+        
+        // Union all these shapes then clip with the half tooth sector path.
+        let cutoutFromAllPaths = this.unionAndClipPaths([...cutterPaths, ...cornersPaths, ...nonIntersectingEdgesPaths], halfToothSectorPath);
+
+        // Remove the origin and order the points so that the point intersecting with the addendum is the first point.
+        var indexOfOrigin;
+        for (let i = 0; i < cutoutFromAllPaths.length; i++) {
+          let point = cutoutFromAllPaths[i];
+          if (point.X == 0 && point.Y == 0) {
+            indexOfOrigin = i;
+            break;
+          }
+        }
+        console.log(`Index of origin: ${indexOfOrigin}`);
+        let maxSquaredRadius = 0;
+        let indexMaxSquaredRadius = 0;
+        let halfToothPath = [];
+        for (let i = 1; i < cutoutFromAllPaths.length; i++) {
+          let point = cutoutFromAllPaths[(indexOfOrigin + i) % cutoutFromAllPaths.length];
+          let squaredRadius = squaredLenth(point);
+          if (squaredRadius > maxSquaredRadius) {
+            maxSquaredRadius = squaredRadius;
+            indexMaxSquaredRadius = i - 1;
+          }
+          halfToothPath.push(point);
+        }
+        console.log(`Index of max radius point: ${indexMaxSquaredRadius}`);
+
+        // Shave off the part beyond the max radius point.
+        halfToothPath = halfToothPath.slice(0, indexMaxSquaredRadius + 1);
+
+        let lightenedPaths = ClipperLib.JS.Lighten(halfToothPath, CLIPPER_LIGHTEN_FACTOR * CLIPPER_SCALE);
+        let lightenedHalfToothPath = lightenedPaths[0];
+        console.log(`Length of lightened half tooth path: ${lightenedHalfToothPath.length}`);
+
+        ClipperLib.JS.ScaleDownPath(lightenedHalfToothPath, CLIPPER_SCALE);
+        return lightenedHalfToothPath.reverse();
+      }
+
+      unionAndClipPaths(scaledUpPaths, scaledUpHalfToothSectorPath) {
+        let orientation = ClipperLib.Clipper.Orientation(scaledUpHalfToothSectorPath);
+
+        let clipper = new ClipperLib.Clipper();
+        scaledUpPaths.forEach(path => {
+          // Make sure the orientation matches.
+          if (ClipperLib.Clipper.Orientation(path) != orientation) {
+            path.reverse();
+          }
+          clipper.AddPath(path, ClipperLib.PolyType.ptSubject, true);  // true means closed path;
+        });
+
+        // Union the shapes of all paths.
+        let solutionPaths = new ClipperLib.Paths();
+        let succeeded = clipper.Execute(ClipperLib.ClipType.ctUnion, solutionPaths, ClipperLib.PolyFillType.pftNonZero, ClipperLib.PolyFillType.pftNonZero);
+
+        clipper = new ClipperLib.Clipper();
+        clipper.AddPath(scaledUpHalfToothSectorPath, ClipperLib.PolyType.ptSubject, true);  // true means closed path;
+        clipper.AddPath(solutionPaths[0], ClipperLib.PolyType.ptClip, true);  // true means closed path;
+
+        solutionPaths = new ClipperLib.Paths();
+        succeeded = clipper.Execute(ClipperLib.ClipType.ctIntersection, solutionPaths, ClipperLib.PolyFillType.pftNonZero, ClipperLib.PolyFillType.pftNonZero);
+        return solutionPaths[0];
+      }
+
+      createHalfToothCutterPaths(zeroedHalfCutterPath) {
+        let gearRatio = this.toothCount / this.pinion.toothCount;
+        
+        // To create the tooth profile we move the (virtual) infinite gear and then turn the resulting cutter position back. 
+        // For illustration see http://lcamtuf.coredump.cx/gcnc/ch6/, section 'Putting it all together'.
+        // We continue until the moved tooth cutter's lower left corner is outside of the outer circle of the gear.
+        // Going any further will no longer influence the shape of the tooth.
+        let angleStepSize = this.angleToothToTooth / 10;
+        //var angleStepSize = Math.PI / Math.sqrt(this.toothCount - this.pinion.toothCount) / halfCount;
+        let cutterPaths = [];
+
+        let pinionRotationAngle = 0;
+        let rotatedCutter = this.createRotatedCutter(zeroedHalfCutterPath, pinionRotationAngle, gearRatio);
+
+        cutterPaths.push(rotatedCutter);
+
+        let desiredSquaredDistance = (this.gearSet.circularPitch / 25) ** 2;
+
+        // Empirical value for when a half tooth is covered.
+        let maxPinionRotationAngle =  Math.PI / Math.sqrt(this.toothCount - this.pinion.toothCount);
+
+        let cutterEndpointIndex = zeroedHalfCutterPath.length - 1;
+        let outerCounter = 0;
+        while(outerCounter < 200 && pinionRotationAngle < maxPinionRotationAngle) {
+          let previousRotatedCutter = rotatedCutter;
+          let previousPinionRotationAngle = pinionRotationAngle;
+          //console.log(`Outer counter ${outerCounter}; pinionRotationAngle: ${pinionRotationAngle}; maxPinionRotationAngle: ${maxPinionRotationAngle}`);
+          outerCounter++;
+
+          let searchingUp = true;
+          let innerCounter = 0;
+          while(innerCounter < 20) {
+            //console.log(`  inner counter ${innerCounter}`);
+            innerCounter++;
+            pinionRotationAngle = previousPinionRotationAngle + angleStepSize;
+            rotatedCutter = this.createRotatedCutter(zeroedHalfCutterPath, pinionRotationAngle, gearRatio);
+
+            // We look at the start and end point of each cutter path. We dtermine rotation angles so that the squared distance between
+            // consecutive start and end points is below an accuracy threshold. 
+            let squaredDistanceStartPoint = squaredDistance(previousRotatedCutter[0], rotatedCutter[0]);
+            let squaredDistanceEndPoint = squaredDistance(previousRotatedCutter[cutterEndpointIndex], rotatedCutter[cutterEndpointIndex]);
+            let actualSquaredDistance = Math.max(squaredDistanceStartPoint, squaredDistanceEndPoint);
+            if (actualSquaredDistance < desiredSquaredDistance / 10) {
+              if (!searchingUp) {
+                // We crossed from too big an angle to one that is small enough.
+                break;
+              } else {
+                angleStepSize = 2 * angleStepSize;
+              }
+            } else if (squaredDistance < desiredSquaredDistance) {
+              // new angle is okay
+              break;
+            } else {
+              // squared distance is too large
+              searchingUp = false;
+              angleStepSize = 0.5 * angleStepSize;
+            }
+          }
+          cutterPaths.push(rotatedCutter);
+          cutterPaths.unshift(this.createRotatedCutter(zeroedHalfCutterPath, -pinionRotationAngle, gearRatio));
+        }
+
+        console.log(`Cutter paths count: ${cutterPaths.length}`);
+        return cutterPaths;
+      }
+
+      createRotatedCutter(zeroedHalfCutterPath, pinionRotationAngle, gearRatio) {
+        // Rotating the pinion by an angle will also roll it along the inner side of the outer ring gear.
+        // First rotate the pinion.
+        // This results in the center of the pinion to be rotated around the center of the ring gear.
+        let pinionCenterRayAngle = -pinionRotationAngle / gearRatio;
+
+        let transformedCutterPath = rotatePointsAroundCenter(zeroedHalfCutterPath, ORIGIN, pinionCenterRayAngle);
+        let rotatedPinionCenter = rotatePointAroundCenter(this.pinion.center, ORIGIN, pinionCenterRayAngle);
+
+        // The pinion turns into the opposite direction.
+        let rotatedCutter = rotatePointsAroundCenter(transformedCutterPath, rotatedPinionCenter, pinionRotationAngle);
+        // Close the half tooth profile.
+        rotatedCutter.push(ORIGIN);
+        return rotatedCutter;
+      }
+
+      createZeroedHalfToothCutterPath() {
+        let enlargedPinionHalfToothPath = this.createEnlargedPinionHalfToothPath();
+
+        // Rotate so that the half tooth points to 3 o'clock. Then shift so that it mashes with the internal gear.
+        let rotatedHalfToothPath = rotatePointsAroundCenter(enlargedPinionHalfToothPath, ORIGIN, -Math.PI / 2 - this.pinion.angleToothToTooth / 2);
+        return createTranslatedPath(rotatedHalfToothPath, this.pinion.center.X, 0).reverse();
+      }
+
+      createEnlargedPinionHalfToothPath() {
+        // To cut the internal gear teeth, the actual pinion comes close but we need to enlarge it to properly cater for clearance and backlash
+        let enlargedPinion = new RegularGear(
+          this.gearSet,
+          this.pinion.toothCount,
+          /* centerHoleDiameter=*/ 0,
+          this.pinion.profileShift
+        );
+
+        return enlargedPinion.createHalfToothPath();
+        //return enlargedPinion.createToothPath();
       }
     }
 
@@ -690,7 +1032,7 @@
 
         let rackShape = [];
         let halfCount = 3.0;
-        for (var i = -halfCount; i < halfCount + 1; i++) {
+        for (let i = -halfCount; i < halfCount + 1; i++) {
           rackToothTemplate.forEach(point => {
             let deltaY = -i * this.gearSet.circularPitch;
             rackShape.push(createTranslatedPoint(point, 0, deltaY));
@@ -739,7 +1081,7 @@
 
         return [upperLeftCorner, upperRightCorner, lowerRightCorner, lowerLeftCorner];
       }
-					
+         
       createGraphics(parent, crossMarkerLength) {
         var gearGroup = parent.group();
         var helperGroup = gearGroup.group();
@@ -761,7 +1103,7 @@
       return { X: x, Y: y};
     }
 
-    function copyPoint(point) {
+    function clonePoint(point) {
       return { X: point.X, Y: point.Y};
     }
 
@@ -771,6 +1113,15 @@
 
     function createTranslatedPath(path, dx, dy) {
       return path.map(point => createTranslatedPoint(point, dx, dy));
+    }
+
+    // Translate point p by vector v
+    function translatePoint(p, v) {
+      return { X: p.X + v.X, Y: p.Y + v.Y};
+    }
+
+    function translatePoints(points, v) {
+      return points.map(point => translatePoint(point, v));
     }
 
     // Squared distance between two 2d points.
@@ -854,7 +1205,7 @@
     // Converts array of {X:..., Y:...} points into an SVG paths.
     function insertSvgPath(group, points, isClosed = true) {
       var svgPath = group.path();
-      for (var i = 0; i < points.length; i++) {
+      for (let i = 0; i < points.length; i++) {
         var svgPoint = createSvgPoint(points[i]);
         if (i == 0) {
           svgPath.M(svgPoint);
@@ -868,7 +1219,7 @@
     }
 
     function addLineSegmentsToPath(svgPath, points, moveToFirst = false) {
-      for (var i = 0; i < points.length; i++) {
+      for (let i = 0; i < points.length; i++) {
         var svgPoint = createSvgPoint(points[i]);
         if (i == 0 && moveToFirst) {
           svgPath.M(svgPoint);
@@ -900,7 +1251,6 @@
     <div id="parameters"></div>
     <input id="update" type="button" value="update" />
   </div>
-  <p><div id="svgcontainer"></div></p>
   <p><div id="drawing" class="svgdiv"></div></p>
   <p><a id="downloadSVG">place holder</a></p>
   <div id="drawingForExport" style="display: none" ></div>
