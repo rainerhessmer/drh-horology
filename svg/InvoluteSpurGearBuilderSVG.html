@@ -204,6 +204,8 @@
           this,
           this.gear2ToothCount,
           this.gear2CenterHoleDiamater,
+          this.clearance,
+          this.backlash,
           this.profileShift
         );
         this.gear2PitchDiameter = this.gear2.pitchDiameter;
@@ -213,11 +215,16 @@
           // Create rack
           this.gear1 = new Rack(
             this,
+            this.clearance,
+            this.backlash,
             -this.profileShift
           );
           this.gear1PitchDiameter = 0;
           this.gear1OuterDiameter = 0;
           this.gearCentersDistance = 0;
+
+          this.gear1.isLeft = true;
+          this.gear2.isLeft = false;
         }
 
         if (this.gear1ToothCount > 0) {
@@ -230,11 +237,16 @@
             this,
             this.gear1ToothCount,
             this.gear1CenterHoleDiamater,
+            this.clearance,
+            this.backlash,
             -this.profileShift
           );
           this.gear1PitchDiameter = this.gear1.pitchDiameter;
           this.gear1OuterDiameter = 2 * this.gear1.outerRadius;
           this.gearCentersDistance = this.gear1.pitchRadius + this.gear2.pitchRadius;
+
+          this.gear1.isLeft = true;
+          this.gear2.isLeft = false;
         }
 
         if (this.gear1ToothCount < 0) {
@@ -246,21 +258,23 @@
           this.gear1 = new InternalGear(
             this,
             -this.gear1ToothCount,
+            this.clearance,
+            this.backlash,
             -this.profileShift
           );
           this.gear1PitchDiameter = this.gear1.pitchDiameter;
           this.gear1OuterDiameter = 2 * this.gear1.outerRadius;
           this.gearCentersDistance = this.gear1.pitchRadius - this.gear2.pitchRadius;
+
+          this.gear1.isLeft = false;
+          this.gear2.isLeft = true;
         }
 
         this.gear1.connectedGear = this.gear2;
         this.gear2.connectedGear = this.gear1;
 
         this.gear1.center = ORIGIN;
-        this.gear1.isLeft = true;
-
         this.gear2.center = this.calcGear2Center();
-        this.gear2.isLeft = false;
 
         this.gear1.update();
         this.gear2.update();
@@ -307,12 +321,18 @@
     }
 
     class RegularGear {
-      constructor(gearSet, toothCount, centerHoleDiameter, profileShift) {
+      constructor(gearSet, toothCount, centerHoleDiameter, clearance, backlash, profileShift, addendumExtension = 0) {
         this.gearSet = gearSet;
         this.toothCount = toothCount;
 
         this.centerHoleDiameter = centerHoleDiameter;
+        this.clearance = clearance;
+        this.backlash = backlash;
         this.profileShift = profileShift;
+
+        // addendumExtension is only set for a pinion that is used as a cutter of an inner gear. In this case the 
+        // addendum extension creates the clearance between the inner gear and its pinion.
+        this.addendumExtension = addendumExtension;
 
         this.angle = 0; // angle in rad of the complete gear (changes during rotation animation)
 
@@ -327,7 +347,7 @@
         this.shiftedAddendum = this.addendum * (1 + this.profileShift);
 
         //Outer Circle
-        this.outerRadius = this.pitchRadius + this.shiftedAddendum;
+        this.outerRadius = this.pitchRadius + this.shiftedAddendum + this.addendumExtension;
         this.angleToothToTooth = degreeToRad(360 / this.toothCount);
       }
 
@@ -584,9 +604,9 @@
         //console.log("toothWidth: " + toothWidth);
         //console.log("addendum: " + this.addendum);
         //console.log("shiftedAddendum: " + this.shiftedAddendum);
-        //console.log("clearance: " + this.gearSet.clearance);
+        //console.log("clearance: " + this.clearance);
         
-        let cutterDepth = this.addendum + this.gearSet.clearance;
+        let cutterDepth = this.addendum + this.clearance;
         let cutterOutsideLength = 3 * this.addendum;
         //console.log("cutterDepth: " + cutterDepth);
         //console.log("cutterOutsideLength: " + cutterOutsideLength);
@@ -596,7 +616,7 @@
 
         // If a positive backlash is defined then we widen the trapezoid accordingly.
         // Each side of the tooth needs to widened by a fourth of the backlash (vertical to cutter faces).
-        let dx = this.gearSet.backlash / 4 / cosPressureAngle;
+        let dx = this.backlash / 4 / cosPressureAngle;
 
         // Create the cutout at 6 o'clock position pointing upwards
         let yBottom = this.pitchRadius + this.profileShift * this.addendum - cutterDepth;
@@ -617,9 +637,11 @@
     }
 
     class InternalGear {
-      constructor(gearSet, toothCount, profileShift) {
+      constructor(gearSet, toothCount, clearance, backlash, profileShift) {
         this.gearSet = gearSet;
         this.toothCount = toothCount;
+        this.clearance = clearance;
+        this.backlash = backlash;
         this.profileShift = profileShift;
 
         this.angle = 0; // angle in rad of the complete gear (changes during rotation animation)
@@ -643,7 +665,7 @@
         this.angleToothToTooth = degreeToRad(360 / this.toothCount);
 
         // Outer circle; just a circle that is greater than the dedendum circle.
-        this.outerRadius = this.pitchRadius + 2 * this.addendum;
+        this.outerRadius = this.pitchRadius + 2.5 * this.addendum;
       }
 
       update() {
@@ -652,7 +674,6 @@
 
         this.pinion = this.connectedGear;
         this.toothPointsTemplate = this.createToothPath();
-        //this.pinionCenter = createPoint(this.pitchRadius - this.pinion.pitchRadius, 0);
       }
 
       createGraphics(parent, crossMarkerLength) {
@@ -665,8 +686,6 @@
         drawCircle(helperGroup, ORIGIN, this.pitchRadius);
         // Dedendum circle
         drawCircle(helperGroup, ORIGIN, this.dedendumRadius);
-        // Outer circle
-        drawCircle(helperGroup, ORIGIN, this.outerRadius);
 
         drawCross(helperGroup, ORIGIN, crossMarkerLength);
 
@@ -677,7 +696,7 @@
         //insertSvgPath(helperGroup, halfToothSectorPath, /* isClosed=*/true);
 
         let regularGroup = gearGroup.group();
-        regularGroup.stroke(regularLinesStyle2).fill('none');
+        regularGroup.stroke(regularLinesStyle).fill('none');
 
         //let halfToothPath = this.createEnlargedPinionHalfToothPath();
         //insertSvgPath(regularGroup, halfToothPath, /* isClosed=*/false);
@@ -691,8 +710,8 @@
         //let zeroedHalfCutterPath = this.createZeroedHalfToothCutterPath();
         //insertSvgPath(helperGroup2, zeroedHalfCutterPath, true);
 
-        let halfToothSectorPath = this.createHalfToothSectorPath();
-        insertSvgPath(helperGroup2, halfToothSectorPath, true);
+        //let halfToothSectorPath = this.createHalfToothSectorPath();
+        //insertSvgPath(helperGroup2, halfToothSectorPath, true);
 
         //let cutterPaths = this.createHalfToothCutterPaths(zeroedHalfCutterPath);
         //cutterPaths.forEach(path => insertSvgPath(helperGroup2, path, true));
@@ -727,6 +746,9 @@
 
         this.insertGearSvgPath(regularGroup);
 
+        // Outer circle
+        drawCircle(regularGroup, ORIGIN, this.outerRadius);
+
         gearGroup.move(this.center.X, this.center.Y);
       }
 
@@ -734,8 +756,16 @@
         let svgPath = group.path();
 
         let firstSvgPoint;
+        var angleOffset;
+        if (this.isLeft) {
+          // rotate counter clockwise so that the starter tooth points east.
+          angleOffset = -Math.PI / 2 - this.angleToothToTooth / 2;
+        } else {
+          // rotate clock wise so that the starter tooth meshes with the left gear.
+          angleOffset = Math.PI / 2 - this.angleToothToTooth;
+        }
         for (let i = 0; i < this.toothCount; i++) {
-          let angle = -i * this.angleToothToTooth;
+          let angle = -i * this.angleToothToTooth + angleOffset;
           let rotatedToothPoints = rotatePointsAroundCenter(this.toothPointsTemplate, ORIGIN, angle);
 
           if (i == 0) {
@@ -997,8 +1027,11 @@
         let enlargedPinion = new RegularGear(
           this.gearSet,
           this.pinion.toothCount,
-          /* centerHoleDiameter=*/ 0,
-          this.pinion.profileShift
+          /* centerHoleDiameter = */ 0,
+          /* clearance = */ 0,
+          -this.pinion.backlash,
+          this.pinion.profileShift,
+          /* addendumExtension = */ this.pinion.clearance
         );
 
         return enlargedPinion.createHalfToothPath();
@@ -1007,8 +1040,10 @@
     }
 
     class Rack {
-      constructor(gearSet, profileShift) {
+      constructor(gearSet, profileShift, clearance, backlash) {
         this.gearSet = gearSet;
+        this.clearance = clearance;
+        this.backlash = backlash;
         this.profileShift = profileShift;
 
         this.addendum = 1 / this.gearSet.diametralPitch;
@@ -1057,9 +1092,9 @@
         //console.log("toothWidth: " + toothWidth);
         //console.log("addendum: " + this.addendum);
         //console.log("shiftedAddendum: " + this.shiftedAddendum);
-        //console.log("clearance: " + this.gearSet.clearance);
+        //console.log("clearance: " + this.clearance);
         
-        let toothDepth = this.addendum + this.gearSet.clearance;
+        let toothDepth = this.addendum + this.clearance;
         //console.log("toothDepth: " + toothDepth);
         
         let sinPressureAngle = Math.sin(this.gearSet.pressureAngle * Math.PI / 180);
@@ -1067,7 +1102,7 @@
 
         // If a positive backlash is defined then we widen the trapezoid accordingly.
         // Each side of the tooth needs to widened by a fourth of the backlash (vertical to cutter faces).
-        let dx = this.gearSet.backlash / 4 / cosPressureAngle;
+        let dx = this.backlash / 4 / cosPressureAngle;
         //console.log("backlash: " + this.backlash);
         //console.log("dx: " + dx);
 
@@ -1233,15 +1268,15 @@
 
 <body>
   <h1>Involute Spur Gear Builder <span style="font-size:10px">(C) 2020 Dr. Rainer Hessmer</span></h1>
-  <p>An open source, browser based utility for calculating and drawing involute spur gears. As an improvement over the majority of other freely available scripts and utilities it fully accounts for undercuts. For additional information please head over to my blog posts <a href="http://www.hessmer.org/blog/2014/01/01/online-involute-spur-gear-builder">part 1</a> and <a href="http://www.hessmer.org/blog/2015/07/13/online-involute-spur-gear-builder-part-2/">part 2</a>. If you prefer a standalone utility and you use Windows 64, see <a href="http://dougrogers.blogspot.com/2016/08/gear-bakery-10-port-of-dr-rainer.html">Doug Roger's port to C++</a>.</p>
+  <p>An open source, browser based utility for calculating and drawing involute spur gears. As an improvement over the majority of other freely available scripts and utilities it fully accounts for undercuts. For additional information please head over to my blog posts <a href="http://www.hessmer.org/blog/2014/01/01/online-involute-spur-gear-builder">part 1</a> and <a href="http://www.hessmer.org/blog/2015/07/13/online-involute-spur-gear-builder-part-2/">part 2</a>.</p>
   <p>The page runs in modern browsers with SVG support (if in doubt, use <a href="https://www.google.com/chrome/browser">Chrome</a>). The generated SVG drawing can be downloaded and imported in CAD applications or opened in the open source SVG editor <a href="http://www.inkscape.org/">Inkscape</a> to export as dxf or other formats.</p>
   <p>The implementation is inspired by the subtractive process that Michal Zalewski's describes in <a href="http://lcamtuf.coredump.cx/gcnc/ch6/#6.2">part six</a> of his excellent <a href=" http://lcamtuf.coredump.cx/gcnc/">Guerrilla guide to CNC machining, mold making, and resin casting</a>.</p>
     <h2>Instructions</h2>
     <p>Specify desired values in the parameters box and then click on the 'Update' button. The tooth count n1 of gear one defines various configurations: 
     <ul>
-        <li>n1 > 0: A regular external gear <br><img src="RegularSpurGear_Small.png" alt="Regular Spur Gear"></li>
+        <li>n1 &gt; 0: A regular external gear <br><img src="RegularSpurGear_Small.png" alt="Regular Spur Gear"></li>
     <li>n1 = 0: Rack and pinion <br><img src="RackAndPinion_Small.png" alt="Rack and Pinion"></li>
-        <li>n1 < 0: An internal gear as used in planetary gears <br><img src="InternalGear_Small.png" alt="Internal Gear"></li>
+        <li>n1 &lt; 0: An internal gear as used in planetary gears <br><img src="InternalGear_Small.png" alt="Internal Gear"></li>
     </ul>
   </p>
   <p>The tool also supports profile shift to reduce the amount of undercut in gears with low tooth counts. 
