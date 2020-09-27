@@ -615,7 +615,7 @@
         let cosPressureAngle = Math.cos(this.gearSet.pressureAngle * Math.PI / 180);
 
         // If a positive backlash is defined then we widen the trapezoid accordingly.
-        // Each side of the tooth needs to widened by a fourth of the backlash (vertical to cutter faces).
+        // Each side of the tooth needs to widened by a fourth of the backlash (perpendiculr to cutter faces).
         let dx = this.backlash / 4 / cosPressureAngle;
 
         // Create the cutout at 6 o'clock position pointing upwards
@@ -1040,7 +1040,7 @@
     }
 
     class Rack {
-      constructor(gearSet, profileShift, clearance, backlash) {
+      constructor(gearSet, clearance, backlash, profileShift) {
         this.gearSet = gearSet;
         this.clearance = clearance;
         this.backlash = backlash;
@@ -1063,10 +1063,10 @@
 
         // The template is a tooth pointing right and centered on the x-axis.
         // We build the rack by starting with the template and then create an equal number
-        // of teeth above and below. 
+        // of teeth above and below.
 
         let rackShape = [];
-        let halfCount = 3.0;
+        let halfCount = Math.floor(this.connectedGear.outerRadius / this.gearSet.circularPitch);
         for (let i = -halfCount; i < halfCount + 1; i++) {
           rackToothTemplate.forEach(point => {
             let deltaY = -i * this.gearSet.circularPitch;
@@ -1100,8 +1100,8 @@
         let sinPressureAngle = Math.sin(this.gearSet.pressureAngle * Math.PI / 180);
         let cosPressureAngle = Math.cos(this.gearSet.pressureAngle * Math.PI / 180);
 
-        // If a positive backlash is defined then we widen the trapezoid accordingly.
-        // Each side of the tooth needs to widened by a fourth of the backlash (vertical to cutter faces).
+        // If a positive backlash is defined then we narrow the trapezoid accordingly.
+        // Each side of the tooth needs to narrowed by a fourth of the backlash (perpendiculr tooth faces).
         let dx = this.backlash / 4 / cosPressureAngle;
         //console.log("backlash: " + this.backlash);
         //console.log("dx: " + dx);
