@@ -50,7 +50,7 @@
 
     const ORIGIN = {X: 0, Y: 0};
     const CLIPPER_SCALE = 100000;
-    const CLIPPER_LIGHTEN_FACTOR = 0.001;
+    const CLIPPER_LIGHTEN_FACTOR = 0.0005;
 
     var drawingWidth;
     var drawingHeight;
@@ -81,17 +81,17 @@
 
     var helperLinesStyle = {
       color: 'blue',
-      width: 0.005
+      width: 0.04
     };
 
     var helperLinesStyle2 = {
       color: 'green',
-      width: 0.005
+      width: 0.04
     };
 
     var markerLinesStyle = {
       color: 'red',
-      width: 0.005
+      width: 0.04
     };
 
     var regularLinesStyle = {
@@ -101,7 +101,7 @@
 
     var regularLinesStyle2 = {
       color: 'red',
-      width: 0.02
+      width: 0.04
     };
 
     function onLoad() {
@@ -492,7 +492,7 @@
         let solutionPaths = new ClipperLib.Paths();
         var succeeded = clipper.Execute(ClipperLib.ClipType.ctIntersection, solutionPaths, ClipperLib.PolyFillType.pftNonZero, ClipperLib.PolyFillType.pftNonZero);
 
-        let lightenedPaths = ClipperLib.JS.Lighten(solutionPaths[0], CLIPPER_LIGHTEN_FACTOR * CLIPPER_SCALE);
+        let lightenedPaths = ClipperLib.JS.Lighten(solutionPaths[0], this.gearSet.circularPitch * CLIPPER_LIGHTEN_FACTOR * CLIPPER_SCALE);
         var clippedToothCutoutPath = lightenedPaths[0];
 
         ClipperLib.JS.ScaleDownPath(clippedToothCutoutPath, CLIPPER_SCALE);
@@ -759,10 +759,10 @@
         var angleOffset;
         if (this.isLeft) {
           // rotate counter clockwise so that the starter tooth points east.
-          angleOffset = -Math.PI / 2 - this.angleToothToTooth / 2;
+          angleOffset = Math.PI - this.angleToothToTooth / 2;
         } else {
           // rotate clock wise so that the starter tooth meshes with the left gear.
-          angleOffset = Math.PI / 2 - this.angleToothToTooth;
+          angleOffset = -this.angleToothToTooth / 2;
         }
         for (let i = 0; i < this.toothCount; i++) {
           let angle = -i * this.angleToothToTooth + angleOffset;
@@ -899,7 +899,7 @@
         // Shave off the part beyond the max radius point.
         halfToothPath = halfToothPath.slice(0, indexMaxSquaredRadius + 1);
 
-        let lightenedPaths = ClipperLib.JS.Lighten(halfToothPath, CLIPPER_LIGHTEN_FACTOR * CLIPPER_SCALE);
+        let lightenedPaths = ClipperLib.JS.Lighten(halfToothPath, this.gearSet.circularPitch * CLIPPER_LIGHTEN_FACTOR * CLIPPER_SCALE);
         let lightenedHalfToothPath = lightenedPaths[0];
         console.log(`Length of lightened half tooth path: ${lightenedHalfToothPath.length}`);
 
