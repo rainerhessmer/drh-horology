@@ -385,20 +385,30 @@
         //let {cutterPaths, lowerLeftCornerIndex} = this.createToothCutterPaths();
         //cutterPaths.forEach(toothCutterPath => insertSvgPath(regularGroup, toothCutterPath, /* isClosed=*/true));
 
+        //let cornersPath = [];
+        //cutterPaths.forEach(toothCutterPath => cornersPath.push(clonePoint(toothCutterPath[lowerLeftCornerIndex])));
+
+        //var helperGroup2 = gearGroup.group();
+        //helperGroup2.stroke(markerLinesStyle).fill('none');
+        //drawCircles(helperGroup2, cornersPath, 0.0001);
+        //insertSvgPath(helperGroup2, cornersPath, /* isClosed=*/true)
+
+
         //let halfToothPath = this.createHalfToothPath();
         //insertSvgPath(regularGroup, halfToothPath, /* isClosed=*/false);
-        //drawCircles(helperGroup, toothCutoutPath, 0.1, markerLinesStyle);
-        //drawCircle(helperGroup, toothCutoutPath[dedendumStartIndex], 0.1, markerLinesStyle);
+        //drawCircles(helperGroup, halfToothPath, 0.0002);
+        //drawCircle(helperGroup, toothCutoutPath[dedendumStartIndex], 0.1);
 
         //let toothPath = this.createToothPath();
         //insertSvgPath(regularGroup, toothPath, /* isClosed=*/false);
+        //drawCircles(helperGroup, toothPath, 0.01);
 
         //let nextIndex = (dedendumStartIndex - 1) % toothCutoutPath.length;
-        //drawCircle(helperGroup, toothCutoutPath[nextIndex], 0.1, markerLinesStyle);
+        //drawCircle(helperGroup, toothCutoutPath[nextIndex], 0.1);
 
         //let corners = [];
         //cutterPaths.forEach(toothCutterPath => corners.push(toothCutterPath[lowerLeftCornerIndex]));
-        //drawCircles(helperGroup, corners, 0.1, markerLinesStyle);
+        //drawCircles(helperGroup, corners, 0.1);
 
         this.insertGearSvgPath(regularGroup);
 
@@ -539,10 +549,13 @@
         // Also create a path from one of the addendum corners to get smooth undercut curves.
         let cornersPath = [];
         cutterPaths.forEach(toothCutterPath => cornersPath.push(clonePoint(toothCutterPath[lowerLeftCornerIndex])));
-        cutterPaths.push(cornersPath);
+        cornersPath.reverse();
+
+        const combinedPaths = [...cutterPaths];
+        combinedPaths.push(cornersPath);
 
         var clipper = new ClipperLib.Clipper();
-        cutterPaths.forEach(path => {
+        combinedPaths.forEach(path => {
           ClipperLib.JS.ScaleUpPath(path,  CLIPPER_SCALE);
           clipper.AddPath(path, ClipperLib.PolyType.ptSubject, true);  // true means closed path;
         });
@@ -550,6 +563,7 @@
         // Union the shapes of all the tooth cutter paths.
         var solutionPaths = new ClipperLib.Paths();
         var succeeded = clipper.Execute(ClipperLib.ClipType.ctUnion, solutionPaths, ClipperLib.PolyFillType.pftNonZero, ClipperLib.PolyFillType.pftNonZero);
+
         return solutionPaths[0];
       }
 
@@ -1219,7 +1233,7 @@
       points.forEach(point => drawCircle(parent, point, radius));
     }
 
-    function drawCircle(parent, point, radius) {
+    function drawCircle(parent, point, radius, strokeStyle) {
       parent.circle(2 * radius).cx(point.X).cy(point.Y);
     }
 
