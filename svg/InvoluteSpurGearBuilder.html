@@ -442,7 +442,8 @@
           let rotatedToothPoints = rotatePointsAroundCenter(this.toothPointsTemplate, ORIGIN, angle);
 
           if (i == 0) {
-            addLineSegmentsToPath(svgPath, rotatedToothPoints, /*moveToFirst=*/ true);
+            // Start with the second point since the closing arc of the last tooth will add the first point.
+            addLineSegmentsToPath(svgPath, rotatedToothPoints.slice(1), /*moveToFirst=*/ true);
             firstSvgPoint = createSvgPoint(rotatedToothPoints[0]);
           } else {
             // connect the previous last point with an arc to the new, rotated tooth points.
@@ -783,7 +784,8 @@
           let rotatedToothPoints = rotatePointsAroundCenter(this.toothPointsTemplate, ORIGIN, angle);
 
           if (i == 0) {
-            addLineSegmentsToPath(svgPath, rotatedToothPoints, /*moveToFirst=*/ true);
+            // Start with the second point since the closing arc of the last tooth will add the first point.
+            addLineSegmentsToPath(svgPath, rotatedToothPoints.slice(1), /*moveToFirst=*/ true);
             firstSvgPoint = createSvgPoint(rotatedToothPoints[0]);
           } else {
             // connect the previous last point with an arc to the new, rotated tooth points.
