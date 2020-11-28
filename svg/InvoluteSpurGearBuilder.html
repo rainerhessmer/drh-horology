@@ -183,7 +183,7 @@
       // based on code from Andreas Köberle (http://stackoverflow.com/questions/10120975/how-to-save-an-svg-generated-by-raphael)
       let anchor = document.getElementById('downloadSVG');
       anchor.innerHTML = 'Download SVG';
-      anchor.download =`involute_gear_${gearSet.gear1.toothCount}_to_${gearSet.gear2.toothCount}.svg`;
+      anchor.download =`involute_gear_${gearSet.gear1.toothCount ? gearSet.gear1.toothCount : 0}_to_${gearSet.gear2.toothCount}.svg`;
       anchor.type = 'image/svg+xml';
       
       // see Eric Bidelman: http://updates.html5rocks.com/2012/06/Don-t-Build-Blobs-Construct-Them
@@ -626,8 +626,8 @@
         //console.log("cutterDepth: " + cutterDepth);
         //console.log("cutterOutsideLength: " + cutterOutsideLength);
         
-        let sinPressureAngle = Math.sin(this.gearSet.pressureAngle * Math.PI / 180);
         let cosPressureAngle = Math.cos(this.gearSet.pressureAngle * Math.PI / 180);
+        let tanPressureAngle = Math.tan(this.gearSet.pressureAngle * Math.PI / 180);
 
         // If a positive backlash is defined then we widen the trapezoid accordingly.
         // Each side of the tooth needs to widened by a fourth of the backlash (perpendiculr to cutter faces).
@@ -637,8 +637,8 @@
         let yBottom = this.pitchRadius + this.profileShift * this.addendum - cutterDepth;
         let yTop = this.pitchRadius + this.profileShift * this.addendum + cutterOutsideLength;
 
-        let lowerRightCorner = createPoint(toothWidth / 2 + dx - cutterDepth * sinPressureAngle, yBottom);
-        let upperRightCorner = createPoint(toothWidth / 2 + dx  + cutterOutsideLength * sinPressureAngle, yTop);
+        let lowerRightCorner = createPoint(toothWidth / 2 + dx - tanPressureAngle * cutterDepth, yBottom);
+        let upperRightCorner = createPoint(toothWidth / 2 + dx  + tanPressureAngle * cutterOutsideLength, yTop);
         let upperLeftCorner = createPoint(-upperRightCorner.X, upperRightCorner.Y);
         let lowerLeftCorner = createPoint(-lowerRightCorner.X, lowerRightCorner.Y);
         
@@ -1113,20 +1113,21 @@
         let toothDepth = this.addendum + this.clearance;
         //console.log("toothDepth: " + toothDepth);
         
-        let sinPressureAngle = Math.sin(this.gearSet.pressureAngle * Math.PI / 180);
         let cosPressureAngle = Math.cos(this.gearSet.pressureAngle * Math.PI / 180);
+        let tanPressureAngle = Math.tan(this.gearSet.pressureAngle * Math.PI / 180);
 
         // If a positive backlash is defined then we narrow the trapezoid accordingly.
         // Each side of the tooth needs to narrowed by a fourth of the backlash (perpendiculr tooth faces).
         let dx = this.backlash / 4 / cosPressureAngle;
-        //console.log("backlash: " + this.backlash);
-        //console.log("dx: " + dx);
+        console.log("backlash: " + this.backlash);
+        console.log("dx: " + dx);
+        console.log("profileShift: " + this.profileShift);
 
         // Create the tooth pointing right.
         let profileShiftOffset = this.profileShift * this.addendum;
 
-        let upperLeftCorner = createPoint(-toothDepth + profileShiftOffset, toothWidth / 2 - dx + toothDepth * sinPressureAngle);
-        let upperRightCorner = createPoint(this.addendum + profileShiftOffset, toothWidth / 2 - dx - this.addendum * sinPressureAngle);
+        let upperLeftCorner = createPoint(-toothDepth + profileShiftOffset, toothWidth / 2 - dx + tanPressureAngle * toothDepth);
+        let upperRightCorner = createPoint(this.addendum + profileShiftOffset, toothWidth / 2 - dx - tanPressureAngle * this.addendum);
         let lowerRightCorner = createPoint(upperRightCorner.X, -upperRightCorner.Y);
         let lowerLeftCorner = createPoint(upperLeftCorner.X, -upperLeftCorner.Y);
 
