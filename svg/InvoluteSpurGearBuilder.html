@@ -630,7 +630,7 @@
         let tanPressureAngle = Math.tan(this.gearSet.pressureAngle * Math.PI / 180);
 
         // If a positive backlash is defined then we widen the trapezoid accordingly.
-        // Each side of the tooth needs to widened by a fourth of the backlash (perpendiculr to cutter faces).
+        // Each side of the tooth needs to widened by a fourth of the backlash (perpendicular to the cutter faces).
         let dx = this.backlash / 4 / cosPressureAngle;
 
         // Create the cutout at 6 o'clock position pointing upwards
@@ -1117,7 +1117,7 @@
         let tanPressureAngle = Math.tan(this.gearSet.pressureAngle * Math.PI / 180);
 
         // If a positive backlash is defined then we narrow the trapezoid accordingly.
-        // Each side of the tooth needs to narrowed by a fourth of the backlash (perpendiculr tooth faces).
+        // Each side of the tooth needs to narrowed by a fourth of the backlash (perpendicular to the tooth faces).
         let dx = this.backlash / 4 / cosPressureAngle;
         console.log("backlash: " + this.backlash);
         console.log("dx: " + dx);
