@@ -863,7 +863,8 @@
           toothPath.push(createPoint(point.X, -point.Y));
         }
 
-        return toothPath;      }
+        return toothPath;
+      }
 
       createHalfToothPath() {
         let zeroedHalfCutterPath = this.createZeroedHalfToothCutterPath();
@@ -967,7 +968,7 @@
         let desiredSquaredDistance = (this.gearSet.circularPitch / 25) ** 2;
 
         // Empirical value for when a half tooth is covered.
-        let maxPinionRotationAngle =  Math.PI / Math.sqrt(this.toothCount - this.pinion.toothCount);
+        let maxPinionRotationAngle =  5 * Math.PI / Math.sqrt(this.toothCount - this.pinion.toothCount);
 
         let cutterEndpointIndex = zeroedHalfCutterPath.length - 1;
         let outerCounter = 0;
